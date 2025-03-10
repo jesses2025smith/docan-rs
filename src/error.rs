@@ -1,4 +1,4 @@
-use iso15765_2::Iso15765Error;
+use iso15765_2::IsoTpError;
 use iso14229_1::{Iso14229Error, Service, response::Code};
 use rs_can::CanError;
 
@@ -23,7 +23,7 @@ pub enum DoCanError {
     NRCError { service: Service, code: Code },
 
     #[error("{0}")]
-    IsoTpError(Iso15765Error),
+    IsoTpError(IsoTpError),
 
     #[error("DoCAN - security algorithm error: {0}")]
     SecurityAlgoError(String),

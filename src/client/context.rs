@@ -1,18 +1,17 @@
 use std::time::{Duration, Instant};
 use iso14229_1::Configuration;
-use iso15765_2::{Iso15765Error, IsoTpEvent, IsoTpEventListener};
-use rs_can::isotp::{CanIsoTp, P2Context};
+use iso15765_2::{CanIsoTp, IsoTpError, IsoTpEvent, IsoTpEventListener, P2};
 use crate::{SecurityAlgo, buffer::IsoTpBuffer};
 
 #[derive(Debug, Default, Clone)]
 pub struct IsoTpListener {
     pub(crate) buffer: IsoTpBuffer,
-    pub(crate) p2_ctx: P2Context,
+    pub(crate) p2_ctx: P2,
     pub(crate) p2_offset: u64,
 }
 
 impl IsoTpListener {
-    pub fn new(p2_ctx: P2Context, p2_offset: u64) -> Self {
+    pub fn new(p2_ctx: P2, p2_offset: u64) -> Self {
         Self {
             buffer: Default::default(),
             p2_ctx,
@@ -23,7 +22,7 @@ impl IsoTpListener {
 
 impl IsoTpListener {
     #[cfg(feature = "async")]
-    pub async fn async_timer(&mut self, response_pending: bool) -> Result<Vec<u8>, Iso15765Error> {
+    pub async fn async_timer(&mut self, response_pending: bool) -> Result<Vec<u8>, IsoTpError> {
         let tov = if response_pending {
             self.p2_ctx.p2_star_ms()
         }
@@ -39,7 +38,7 @@ impl IsoTpListener {
 
             if start.elapsed() > timeout {
                 self.clear_buffer();
-                return Err(Iso15765Error::Timeout { value: tov, unit: "ms" })
+                return Err(IsoTpError::Timeout { value: tov, unit: "ms" })
             }
 
             match self.from_buffer() {
@@ -63,7 +62,7 @@ impl IsoTpListener {
         }
     }
 
-    pub fn sync_timer(&mut self, response_pending: bool) -> Result<Vec<u8>, Iso15765Error> {
+    pub fn sync_timer(&mut self, response_pending: bool) -> Result<Vec<u8>, IsoTpError> {
         let tov = if response_pending {
             self.p2_ctx.p2_star_ms()
         }
@@ -79,7 +78,7 @@ impl IsoTpListener {
 
             if start.elapsed() > timeout {
                 self.clear_buffer();
-                return Err(Iso15765Error::Timeout { value: tov, unit: "ms" });
+                return Err(IsoTpError::Timeout { value: tov, unit: "ms" });
             }
 
             match self.buffer_data() {
@@ -107,7 +106,7 @@ impl IsoTpListener {
     }
 
     #[inline]
-    pub fn update_p2_ctx(&mut self, p2: u16, p2_star: u16) {
+    pub fn update_p2_ctx(&mut self, p2: u16, p2_star: u32) {
         self.p2_ctx.update(p2, p2_star)
     }
 }

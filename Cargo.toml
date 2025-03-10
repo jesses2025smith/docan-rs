@@ -17,13 +17,17 @@ keywords = [
 log = "0.4"
 thiserror = "2"
 hex = "0.4"
-iso15765-2 = "0.1.0-alpha1"
-rs-can = "0.1.0-alpha3"
+rs-can = { git = "https://github.com/zhuyu4839/rust-can.git", branch = "develop", package = "rs-can" }
 
 [dependencies.iso14229-1]
-path = "../iso14229-1"
+git = "https://github.com/zhuyu4839/iso14229-1.git"
 default-features = false
 optional = true
+
+[dependencies.iso15765-2 ]
+git = "https://github.com/zhuyu4839/iso15765-2.git"
+branch = "develop"
+default-features = false
 
 #[dependencies.tokio]
 #workspace = true
@@ -33,10 +37,10 @@ optional = true
 [features]
 async = []
 
-default = ["std2020", "client", "server"]
+default = ["std2020", "client"]
 
-client = ["rs-can/isotp-std2004"]
-server = ["rs-can/isotp-std2004"]
+client = ["iso15765-2/can", "iso15765-2/std2004"]
+server = ["iso15765-2/can", "iso15765-2/std2004"]
 
 std2006 = ["iso14229-1/std2006"]
 std2013 = ["iso14229-1/std2013"]

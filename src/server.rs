@@ -7,14 +7,14 @@ pub use synchronous::*;
 
 pub(crate) mod util;
 
-use rs_can::ResultWrapper;
+use rs_can::CanResult;
 
 pub trait Server {
     type Channel;
     type Device;
     type Error;
 
-    fn service_forever(&mut self, interval: u64) -> ResultWrapper<(), Self::Error>;
+    fn service_forever(&mut self, interval: u64) -> CanResult<(), Self::Error>;
 
-    fn service_stop(&mut self) -> ResultWrapper<(), Self::Error>;
+    fn service_stop(&mut self) -> CanResult<(), Self::Error>;
 }

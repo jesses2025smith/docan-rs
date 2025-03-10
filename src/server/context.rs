@@ -5,8 +5,8 @@ use diag_info_manager::DiagInfoManager;
 
 use std::{fmt::Display, time::Duration, thread};
 use iso14229_1::{request::Request, response::{self, Response, Code}, *};
-use iso15765_2::{IsoTpEvent, IsoTpEventListener};
-use rs_can::{Frame, isotp::{AddressType, CanIsoTp}};
+use iso15765_2::{AddressType, CanIsoTp, IsoTpEvent, IsoTpEventListener};
+use rs_can::CanFrame;
 use crate::{buffer::IsoTpBuffer, DoCanError, SecurityAlgo, server::util};
 
 #[derive(Debug, Default, Clone)]
@@ -44,7 +44,7 @@ pub struct Context<C, F> {
 impl<C, F> Context<C, F>
 where
     C: Display + Clone,
-    F: Frame<Channel = C>
+    F: CanFrame<Channel = C>
 {
     pub fn new(iso_tp: CanIsoTp<C, F>, listener: IsoTpListener) -> Self {
         Self {

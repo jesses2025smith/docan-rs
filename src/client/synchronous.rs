@@ -1,8 +1,8 @@
 use std::{collections::HashMap, fmt::Display, hash::Hash, time::Duration};
 use iso14229_1::{response::{self, Response, Code}, request::{self, Request}, *};
 use iso14229_1::utils::U24;
-use iso15765_2::{Iso15765Error, IsoTpEventListener};
-use rs_can::{CanDriver, isotp::{Address, AddressType, CanIsoTp, IsoTpAdapter}, Frame, ResultWrapper};
+use iso15765_2::{Address, AddressType, CanAdapter, CanIsoTp, IsoTpError, IsoTpEventListener};
+use rs_can::{CanDevice, CanFrame, CanResult};
 use crate::{client::context::{Context, IsoTpListener}, Client, DoCanError, SecurityAlgo};
 
 #[derive(Clone)]
@@ -10,18 +10,18 @@ pub struct DoCanClient<D, C, F>
 where
     C: Clone + Eq,
 {
-    adapter: IsoTpAdapter<D, C, F>,
+    adapter: CanAdapter<D, C, F>,
     context: HashMap<C, Context<C, F>>,
     p2_offset: u64,
 }
 
 impl<D, C, F> DoCanClient<D, C, F>
 where
-    D: CanDriver<Channel = C, Frame = F> + Clone + Send + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Display + Clone + Hash + Eq + 'static,
-    F: Frame<Channel = C> + Clone + Send + Display + 'static
+    F: CanFrame<Channel = C> + Clone + Send + Display + 'static
 {
-    pub fn new(adapter: IsoTpAdapter<D, C, F>, p2_offset: Option<u16>) -> Self {
+    pub fn new(adapter: CanAdapter<D, C, F>, p2_offset: Option<u16>) -> Self {
         Self {
             adapter,
             context: Default::default(),
@@ -52,7 +52,7 @@ where
         Ok(())
     }
     #[inline]
-    pub fn adapter(&self) -> &IsoTpAdapter<D, C, F> {
+    pub fn adapter(&self) -> &CanAdapter<D, C, F> {
         &self.adapter
     }
 
@@ -93,7 +93,7 @@ where
             Ok(r) => Ok(Some(r)),
             Err(e) => match e {
                 DoCanError::IsoTpError(e) => match e {
-                    Iso15765Error::Timeout {..} => if suppress_positive {
+                    IsoTpError::Timeout {..} => if suppress_positive {
                         Ok(None)
                     } else {
                         Err(DoCanError::IsoTpError(e))
@@ -171,14 +171,14 @@ where
 
 impl<D, C, F> Client for DoCanClient<D, C, F>
 where
-    D: CanDriver<Channel = C, Frame = F> + Clone + Send + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Display + Clone + Hash + Eq + 'static,
-    F: Frame<Channel = C> + Clone + Send + Display + 'static
+    F: CanFrame<Channel = C> + Clone + Send + Display + 'static
 {
     type Channel = C;
     type Error = DoCanError;
 
-    fn update_address(&mut self, channel: Self::Channel, address: Address) -> ResultWrapper<(), Self::Error> {
+    fn update_address(&mut self, channel: Self::Channel, address: Address) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             ctx.iso_tp.update_address(address);
 
@@ -186,7 +186,7 @@ where
         })
     }
 
-    fn update_security_algo(&mut self, channel: Self::Channel, algo: SecurityAlgo) -> ResultWrapper<(), Self::Error> {
+    fn update_security_algo(&mut self, channel: Self::Channel, algo: SecurityAlgo) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             ctx.security_algo = Some(algo);
 
@@ -194,7 +194,7 @@ where
         })
     }
 
-    fn add_data_identifier(&mut self, channel: Self::Channel, did: DataIdentifier, length: usize) -> ResultWrapper<(), Self::Error> {
+    fn add_data_identifier(&mut self, channel: Self::Channel, did: DataIdentifier, length: usize) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             ctx.config.did_cfg.insert(did, length);
 
@@ -202,7 +202,7 @@ where
         })
     }
 
-    fn remove_data_identifier(&mut self, channel: Self::Channel, did: DataIdentifier) -> ResultWrapper<(), Self::Error> {
+    fn remove_data_identifier(&mut self, channel: Self::Channel, did: DataIdentifier) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             ctx.config.did_cfg.remove(&did);
 
@@ -210,7 +210,7 @@ where
         })
     }
 
-    fn set_address_of_byte_order(&mut self, channel: Self::Channel, bo: ByteOrder) -> ResultWrapper<(), Self::Error> {
+    fn set_address_of_byte_order(&mut self, channel: Self::Channel, bo: ByteOrder) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             ctx.config.bo_addr = bo;
 
@@ -218,7 +218,7 @@ where
         })
     }
 
-    fn set_memory_size_of_byte_order(&mut self, channel: Self::Channel, bo: ByteOrder) -> ResultWrapper<(), Self::Error> {
+    fn set_memory_size_of_byte_order(&mut self, channel: Self::Channel, bo: ByteOrder) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             ctx.config.bo_mem_size = bo;
 
@@ -226,7 +226,7 @@ where
         })
     }
 
-    fn session_ctrl(&mut self, channel: Self::Channel, r#type: SessionType, suppress_positive: bool, addr_type: AddressType) -> ResultWrapper<(), Self::Error> {
+    fn session_ctrl(&mut self, channel: Self::Channel, r#type: SessionType, suppress_positive: bool, addr_type: AddressType) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::SessionCtrl;
             let mut sub_func: u8 = r#type.into();
@@ -242,14 +242,14 @@ where
                 let timing = response.data::<response::SessionCtrl>(&ctx.config)
                     .map_err(DoCanError::ISO14229Error)?
                     .0;
-                ctx.listener.update_p2_ctx(timing.p2, timing.p2_star);
+                ctx.listener.update_p2_ctx(timing.p2, timing.p2_star as u32);
             }
 
             Ok(())
         })
     }
 
-    fn ecu_reset(&mut self, channel: Self::Channel, r#type: ECUResetType, suppress_positive: bool, addr_type: AddressType) -> ResultWrapper<(), Self::Error> {
+    fn ecu_reset(&mut self, channel: Self::Channel, r#type: ECUResetType, suppress_positive: bool, addr_type: AddressType) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::ECUReset;
             let mut sub_func: u8 = r#type.into();
@@ -273,7 +273,7 @@ where
         })
     }
 
-    fn security_access(&mut self, channel: Self::Channel, level: u8, params: Vec<u8>) -> ResultWrapper<Vec<u8>, Self::Error> {
+    fn security_access(&mut self, channel: Self::Channel, level: u8, params: Vec<u8>) -> CanResult<Vec<u8>, Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::SecurityAccess;
             let request = Request::new(service, Some(level), params, &ctx.config)
@@ -287,7 +287,7 @@ where
         })
     }
 
-    fn unlock_security_access(&mut self, channel: Self::Channel, level: u8, params: Vec<u8>, salt: Vec<u8>) -> ResultWrapper<(), Self::Error> {
+    fn unlock_security_access(&mut self, channel: Self::Channel, level: u8, params: Vec<u8>, salt: Vec<u8>) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             if let Some(algo) = ctx.security_algo {
                 let service = Service::SecurityAccess;
@@ -315,7 +315,7 @@ where
         })
     }
 
-    fn communication_control(&mut self, channel: Self::Channel, ctrl_type: CommunicationCtrlType, comm_type: CommunicationType, node_id: Option<request::NodeId>, suppress_positive: bool, addr_type: AddressType) -> ResultWrapper<(), Self::Error> {
+    fn communication_control(&mut self, channel: Self::Channel, ctrl_type: CommunicationCtrlType, comm_type: CommunicationType, node_id: Option<request::NodeId>, suppress_positive: bool, addr_type: AddressType) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::CommunicationCtrl;
             let mut sub_func = ctrl_type.into();
@@ -338,7 +338,7 @@ where
     }
 
     #[cfg(feature = "std2020")]
-    fn authentication(&mut self, channel: Self::Channel, auth_task: AuthenticationTask, data: request::Authentication) -> ResultWrapper<response::Authentication, Self::Error> {
+    fn authentication(&mut self, channel: Self::Channel, auth_task: AuthenticationTask, data: request::Authentication) -> CanResult<response::Authentication, Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::Authentication;
             let request = Request::new(service, Some(auth_task.into()), data.to_vec(&ctx.config), &ctx.config)
@@ -352,7 +352,7 @@ where
         })
     }
 
-    fn tester_present(&mut self, channel: Self::Channel, r#type: TesterPresentType, suppress_positive: bool, addr_type: AddressType) -> ResultWrapper<(), Self::Error> {
+    fn tester_present(&mut self, channel: Self::Channel, r#type: TesterPresentType, suppress_positive: bool, addr_type: AddressType) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             let (service, request) =
                 Self::tester_present_request(ctx, r#type, suppress_positive)?;
@@ -368,7 +368,7 @@ where
     }
 
     #[cfg(any(feature = "std2006", feature = "std2013"))]
-    fn access_timing_parameter(&mut self, channel: Self::Channel, r#type: TimingParameterAccessType, parameter: Vec<u8>, suppress_positive: bool) -> ResultWrapper<Option<response::AccessTimingParameter>, Self::Error> {
+    fn access_timing_parameter(&mut self, channel: Self::Channel, r#type: TimingParameterAccessType, parameter: Vec<u8>, suppress_positive: bool) -> CanResult<Option<response::AccessTimingParameter>, Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::AccessTimingParam;
             let mut sub_func = r#type.into();
@@ -390,7 +390,7 @@ where
         })
     }
 
-    fn secured_data_transmit(&mut self, channel: Self::Channel, apar: AdministrativeParameter, signature: SignatureEncryptionCalculation, anti_replay_cnt: u16, service: u8, service_data: Vec<u8>, signature_data: Vec<u8>) -> ResultWrapper<response::SecuredDataTrans, Self::Error> {
+    fn secured_data_transmit(&mut self, channel: Self::Channel, apar: AdministrativeParameter, signature: SignatureEncryptionCalculation, anti_replay_cnt: u16, service: u8, service_data: Vec<u8>, signature_data: Vec<u8>) -> CanResult<response::SecuredDataTrans, Self::Error> {
         self.context_util(channel, |ctx| {
             let data = request::SecuredDataTrans::new(
                 apar, signature, anti_replay_cnt, service, service_data, signature_data
@@ -406,7 +406,7 @@ where
         })
     }
 
-    fn control_dtc_setting(&mut self, channel: Self::Channel, r#type: DTCSettingType, parameter: Vec<u8>, suppress_positive: bool) -> ResultWrapper<(), Self::Error> {
+    fn control_dtc_setting(&mut self, channel: Self::Channel, r#type: DTCSettingType, parameter: Vec<u8>, suppress_positive: bool) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::CtrlDTCSetting;
             let mut sub_func = r#type.into();
@@ -426,13 +426,13 @@ where
         })
     }
 
-    fn response_on_event(&mut self, channel: Self::Channel) -> ResultWrapper<(), Self::Error> {
+    fn response_on_event(&mut self, channel: Self::Channel) -> CanResult<(), Self::Error> {
         self.context_util(channel, |_| {
             Err(DoCanError::NotImplement(Service::ResponseOnEvent))
         })
     }
 
-    fn link_control(&mut self, channel: Self::Channel, r#type: LinkCtrlType, data: request::LinkCtrl, suppress_positive: bool) -> ResultWrapper<(), Self::Error> {
+    fn link_control(&mut self, channel: Self::Channel, r#type: LinkCtrlType, data: request::LinkCtrl, suppress_positive: bool) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::LinkCtrl;
             let mut sub_func = r#type.into();
@@ -452,7 +452,7 @@ where
         })
     }
 
-    fn read_data_by_identifier(&mut self, channel: Self::Channel, did: DataIdentifier, others: Vec<DataIdentifier>) -> ResultWrapper<response::ReadDID, Self::Error> {
+    fn read_data_by_identifier(&mut self, channel: Self::Channel, did: DataIdentifier, others: Vec<DataIdentifier>) -> CanResult<response::ReadDID, Self::Error> {
         self.context_util(channel, |ctx| {
             let data = request::ReadDID::new(did, others);
             let request = Request::new(Service::ReadDID, None, data.to_vec(&ctx.config), &ctx.config)
@@ -465,7 +465,7 @@ where
         })
     }
 
-    fn read_memory_by_address(&mut self, channel: Self::Channel, mem_loc: MemoryLocation) -> ResultWrapper<Vec<u8>, Self::Error> {
+    fn read_memory_by_address(&mut self, channel: Self::Channel, mem_loc: MemoryLocation) -> CanResult<Vec<u8>, Self::Error> {
         self.context_util(channel, |ctx| {
             let data = request::ReadMemByAddr(mem_loc);
             let request = Request::new(Service::ReadMemByAddr, None, data.to_vec(&ctx.config), &ctx.config)
@@ -477,7 +477,7 @@ where
         })
     }
 
-    fn read_scaling_data_by_identifier(&mut self, channel: Self::Channel, did: DataIdentifier) -> ResultWrapper<response::ReadScalingDID, Self::Error> {
+    fn read_scaling_data_by_identifier(&mut self, channel: Self::Channel, did: DataIdentifier) -> CanResult<response::ReadScalingDID, Self::Error> {
         self.context_util(channel, |ctx| {
             let data = request::ReadScalingDID(did);
             let request = Request::new(Service::ReadScalingDID, None, data.to_vec(&ctx.config), &ctx.config)
@@ -490,7 +490,7 @@ where
         })
     }
 
-    fn read_data_by_period_identifier(&mut self, channel: Self::Channel, mode: request::TransmissionMode, did: Vec<u8>) -> ResultWrapper<response::ReadDataByPeriodId, Self::Error> {
+    fn read_data_by_period_identifier(&mut self, channel: Self::Channel, mode: request::TransmissionMode, did: Vec<u8>) -> CanResult<response::ReadDataByPeriodId, Self::Error> {
         self.context_util(channel, |ctx| {
             let data = request::ReadDataByPeriodId::new(mode, did)
                 .map_err(DoCanError::ISO14229Error)?;
@@ -504,7 +504,7 @@ where
         })
     }
 
-    fn dynamically_define_data_by_identifier(&mut self, channel: Self::Channel, r#type: DefinitionType, data: request::DynamicallyDefineDID, suppress_positive: bool) -> ResultWrapper<Option<response::DynamicallyDefineDID>, Self::Error> {
+    fn dynamically_define_data_by_identifier(&mut self, channel: Self::Channel, r#type: DefinitionType, data: request::DynamicallyDefineDID, suppress_positive: bool) -> CanResult<Option<response::DynamicallyDefineDID>, Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::DynamicalDefineDID;
             let mut sub_func = r#type.into();
@@ -527,7 +527,7 @@ where
         })
     }
 
-    fn write_data_by_identifier(&mut self, channel: Self::Channel, did: DataIdentifier, data: Vec<u8>) -> ResultWrapper<(), Self::Error> {
+    fn write_data_by_identifier(&mut self, channel: Self::Channel, did: DataIdentifier, data: Vec<u8>) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             let data = request::WriteDID(DIDData { did, data });
             let request = Request::new(Service::WriteDID, None, data.to_vec(&ctx.config), &ctx.config)
@@ -539,7 +539,7 @@ where
         })
     }
 
-    fn write_memory_by_address(&mut self, channel: Self::Channel, alfi: AddressAndLengthFormatIdentifier, mem_addr: u128, mem_size: u128, record: Vec<u8>) -> ResultWrapper<response::WriteMemByAddr, Self::Error> {
+    fn write_memory_by_address(&mut self, channel: Self::Channel, alfi: AddressAndLengthFormatIdentifier, mem_addr: u128, mem_size: u128, record: Vec<u8>) -> CanResult<response::WriteMemByAddr, Self::Error> {
         self.context_util(channel, |ctx| {
             let data = request::WriteMemByAddr::new(alfi, mem_addr, mem_size, record)
                 .map_err(DoCanError::ISO14229Error)?;
@@ -553,7 +553,7 @@ where
         })
     }
 
-    fn clear_dtc_info(&mut self, channel: Self::Channel, group: U24, mem_sel: Option<u8>, addr_type: AddressType) -> ResultWrapper<(), Self::Error> {
+    fn clear_dtc_info(&mut self, channel: Self::Channel, group: U24, mem_sel: Option<u8>, addr_type: AddressType) -> CanResult<(), Self::Error> {
         self.context_util(channel, |ctx| {
             #[cfg(any(feature = "std2020"))]
             let data = request::ClearDiagnosticInfo::new(group, mem_sel);
@@ -568,7 +568,7 @@ where
         })
     }
 
-    fn read_dtc_info(&mut self, channel: Self::Channel, r#type: DTCReportType, data: request::DTCInfo) -> ResultWrapper<response::DTCInfo, Self::Error> {
+    fn read_dtc_info(&mut self, channel: Self::Channel, r#type: DTCReportType, data: request::DTCInfo) -> CanResult<response::DTCInfo, Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::ReadDTCInfo;
             let request = Request::new(service, Some(r#type.into()), data.to_vec(&ctx.config), &ctx.config)
@@ -582,7 +582,7 @@ where
         })
     }
 
-    fn io_control(&mut self, channel: Self::Channel, did: DataIdentifier, param: IOCtrlParameter, state: Vec<u8>, mask: Vec<u8>) -> ResultWrapper<response::IOCtrl, Self::Error> {
+    fn io_control(&mut self, channel: Self::Channel, did: DataIdentifier, param: IOCtrlParameter, state: Vec<u8>, mask: Vec<u8>) -> CanResult<response::IOCtrl, Self::Error> {
         self.context_util(channel, |ctx| {
             let data = request::IOCtrl::new(did, param, state, mask, &ctx.config)
                 .map_err(DoCanError::ISO14229Error)?;
@@ -596,7 +596,7 @@ where
         })
     }
 
-    fn routine_control(&mut self, channel: Self::Channel, r#type: RoutineCtrlType, routine_id: u16, option_record: Vec<u8>) -> ResultWrapper<response::RoutineCtrl, Self::Error> {
+    fn routine_control(&mut self, channel: Self::Channel, r#type: RoutineCtrlType, routine_id: u16, option_record: Vec<u8>) -> CanResult<response::RoutineCtrl, Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::RoutineCtrl;
             let data = request::RoutineCtrl { routine_id: RoutineId(routine_id), option_record };
@@ -611,7 +611,7 @@ where
         })
     }
 
-    fn request_download(&mut self, channel: Self::Channel, alfi: AddressAndLengthFormatIdentifier, mem_addr: u128, mem_size: u128, dfi: Option<DataFormatIdentifier>) -> ResultWrapper<response::RequestDownload, Self::Error> {
+    fn request_download(&mut self, channel: Self::Channel, alfi: AddressAndLengthFormatIdentifier, mem_addr: u128, mem_size: u128, dfi: Option<DataFormatIdentifier>) -> CanResult<response::RequestDownload, Self::Error> {
         self.context_util(channel, |ctx| {
             let data = request::RequestDownload {
                 dfi: dfi.unwrap_or_default(),
@@ -628,7 +628,7 @@ where
         })
     }
 
-    fn request_upload(&mut self, channel: Self::Channel, alfi: AddressAndLengthFormatIdentifier, mem_addr: u128, mem_size: u128, dfi: Option<DataFormatIdentifier>) -> ResultWrapper<response::RequestUpload, Self::Error> {
+    fn request_upload(&mut self, channel: Self::Channel, alfi: AddressAndLengthFormatIdentifier, mem_addr: u128, mem_size: u128, dfi: Option<DataFormatIdentifier>) -> CanResult<response::RequestUpload, Self::Error> {
         self.context_util(channel, |ctx| {
             let data = request::RequestUpload {
                 dfi: dfi.unwrap_or_default(),
@@ -645,7 +645,7 @@ where
         })
     }
 
-    fn transfer_data(&mut self, channel: Self::Channel, sequence: u8, data: Vec<u8>) -> ResultWrapper<response::TransferData, Self::Error> {
+    fn transfer_data(&mut self, channel: Self::Channel, sequence: u8, data: Vec<u8>) -> CanResult<response::TransferData, Self::Error> {
         self.context_util(channel, |ctx| {
             let data = response::TransferData { sequence, data };
             let request = Request::new(Service::TransferData, None, data.to_vec(&ctx.config), &ctx.config)
@@ -664,7 +664,7 @@ where
         })
     }
 
-    fn request_transfer_exit(&mut self, channel: Self::Channel, parameter: Vec<u8>) -> ResultWrapper<Vec<u8>, Self::Error> {
+    fn request_transfer_exit(&mut self, channel: Self::Channel, parameter: Vec<u8>) -> CanResult<Vec<u8>, Self::Error> {
         self.context_util(channel, |ctx| {
             let request = Request::new(Service::RequestTransferExit, None, parameter, &ctx.config)
                 .map_err(DoCanError::ISO14229Error)?;
@@ -675,7 +675,7 @@ where
         })
     }
 
-    fn request_file_transfer(&mut self, channel: Self::Channel, operation: ModeOfOperation, data: request::RequestFileTransfer) -> ResultWrapper<response::RequestFileTransfer, Self::Error> {
+    fn request_file_transfer(&mut self, channel: Self::Channel, operation: ModeOfOperation, data: request::RequestFileTransfer) -> CanResult<response::RequestFileTransfer, Self::Error> {
         self.context_util(channel, |ctx| {
             let service = Service::RequestFileTransfer;
             let sub_func = operation.into();
