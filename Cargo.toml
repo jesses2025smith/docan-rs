@@ -1,38 +1,17 @@
 [package]
 name = "docan"
-version = "0.1.0-alpha2"
+version = "0.1.0-alpha3"
 edition = "2021"
 license = "MIT OR GPL-3.0"
-authors = ["zhuyu <zhuyu4839@gmail.com>"]
+authors = ["Jesse Smith <zhuyu4839@gmail.com>"]
 description = "A DoCAN protocol."
-homepage = "https://github.com/zhuyu4839/ecu-proto-rs"
-repository = "https://github.com/zhuyu4839/ecu-proto-rs"
+homepage = "https://github.com/zhuyu4839/docan-rs"
+repository = "https://github.com/zhuyu4839/docan-rs"
 keywords = [
     "automotive",
     "UDS",
     "DoCAN"
 ]
-
-[dependencies]
-log = "0.4"
-thiserror = "2"
-hex = "0.4"
-rs-can = { git = "https://github.com/zhuyu4839/rust-can.git", branch = "develop", package = "rs-can" }
-
-[dependencies.iso14229-1]
-git = "https://github.com/zhuyu4839/iso14229-1.git"
-default-features = false
-optional = true
-
-[dependencies.iso15765-2 ]
-git = "https://github.com/zhuyu4839/iso15765-2.git"
-branch = "develop"
-default-features = false
-
-#[dependencies.tokio]
-#workspace = true
-#features = ["time", ]
-#optional = true
 
 [features]
 async = []
@@ -45,3 +24,29 @@ server = ["iso15765-2/can", "iso15765-2/std2004"]
 std2006 = ["iso14229-1/std2006"]
 std2013 = ["iso14229-1/std2013"]
 std2020 = ["iso14229-1/std2020"]
+
+[lib]
+crate-type = ["lib", "cdylib", ]
+name = "docan_rs"
+
+[dependencies]
+log = "0.4"
+thiserror = "2"
+hex = "0.4"
+
+[dependencies.rs-can]
+version = "0.2.0"
+
+[dependencies.iso14229-1]
+version = "0.1.0-alpha4"
+default-features = false
+optional = true
+
+[dependencies.iso15765-2 ]
+version = "0.1.0-alpha5"
+default-features = false
+
+#[dependencies.tokio]
+#workspace = true
+#features = ["time", ]
+#optional = true
