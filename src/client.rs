@@ -5,6 +5,7 @@ mod synchronous;
 #[cfg(not(feature = "async"))]
 pub use synchronous::*;
 
+use rsutil::types::ByteOrder;
 use iso14229_1::{request, response, *};
 use iso15765_2::{Address, AddressType};
 use rs_can::CanResult;

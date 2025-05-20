@@ -12,7 +12,7 @@ impl IsoTpBuffer {
         match self.inner.lock() {
             Ok(mut buffer) => buffer.clear(),
             Err(_) => {
-                log::warn!("DoCAN - failed to acquire write lock for `IsoTpBuffer::clear`");
+                rsutil::warn!("DoCAN - failed to acquire write lock for `IsoTpBuffer::clear`");
             },
         }
     }
@@ -22,7 +22,7 @@ impl IsoTpBuffer {
         match self.inner.lock() {
             Ok(mut buffer) => buffer.push_back(event),
             Err(_) => {
-                log::warn!("DoCAN - failed to acquire write lock for `IsoTpBuffer::set`");
+                rsutil::warn!("DoCAN - failed to acquire write lock for `IsoTpBuffer::set`");
             },
         }
     }
@@ -32,7 +32,7 @@ impl IsoTpBuffer {
         match self.inner.lock() {
             Ok(mut buffer) => buffer.pop_front(),
             Err(_) => {
-                log::warn!("DoCAN - failed to acquire write lock for `IsoTpBuffer::get`");
+                rsutil::warn!("DoCAN - failed to acquire write lock for `IsoTpBuffer::get`");
                 None
             },
         }

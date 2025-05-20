@@ -64,7 +64,7 @@ where
                     IsoTpEvent::Wait => self.session_manager.keep_session(),
                     IsoTpEvent::FirstFrameReceived => {},   // nothing to do
                     IsoTpEvent::DataReceived(data) => {
-                        log::trace!("DoCANServer - data received: {}", hex::encode(&data));
+                        rsutil::trace!("DoCANServer - data received: {}", hex::encode(&data));
                         if data.is_empty() {
                             continue;
                         }
@@ -162,7 +162,7 @@ where
                                     }
                                 },
                                 Err(err) => {
-                                    log::warn!("DoCANServer - error: {} when parsing response", err);
+                                    rsutil::warn!("DoCANServer - error: {} when parsing response", err);
                                     Some(vec![Service::NRC.into(), service, Code::GeneralReject.into()])
                                 }
                             }
@@ -174,7 +174,7 @@ where
                         }
                     },
                     IsoTpEvent::ErrorOccurred(e) => {
-                        log::warn!("DoCANServer - iso-tp error: {}", e);
+                        rsutil::warn!("DoCANServer - iso-tp error: {}", e);
                         // TODO
                     },
                 }

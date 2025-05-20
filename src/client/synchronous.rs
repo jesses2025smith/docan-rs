@@ -1,3 +1,4 @@
+use rsutil::types::ByteOrder;
 use std::{collections::HashMap, fmt::Display, hash::Hash, time::Duration};
 use iso14229_1::{response::{self, Response, Code}, request::{self, Request}, *};
 use iso14229_1::utils::U24;
@@ -119,7 +120,7 @@ where
         let mut response = Response::try_from_cfg(data, &ctx.config)
             .map_err(DoCanError::ISO14229Error)?;
         while Self::response_service_check(&response, service)? {
-            log::debug!("DoCANClient - tester present when {:?}", Code::RequestCorrectlyReceivedResponsePending);
+            rsutil::debug!("DoCANClient - tester present when {:?}", Code::RequestCorrectlyReceivedResponsePending);
             let (_, request) =
                 Self::tester_present_request(ctx, TesterPresentType::Zero, true)?;
             ctx.iso_tp.write(addr_type, request.into())

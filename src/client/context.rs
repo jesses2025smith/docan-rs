@@ -47,7 +47,7 @@ impl IsoTpListener {
                         start = Instant::now();
                     },
                     IsoTpEvent::DataReceived(data) => {
-                        log::trace!("DoCAN - data received: {}", hex::encode(&data));
+                        rsutil::trace!("DoCAN - data received: {}", hex::encode(&data));
                         return Ok(data);
                     },
                     IsoTpEvent::ErrorOccurred(e) => {
@@ -90,7 +90,7 @@ impl IsoTpListener {
                         if data.is_empty() {
                             continue;
                         }
-                        log::trace!("DoCANClient - data received: {}", hex::encode(&data));
+                        rsutil::trace!("DoCANClient - data received: {}", hex::encode(&data));
                         return Ok(data);
                     },
                     IsoTpEvent::ErrorOccurred(e) => {

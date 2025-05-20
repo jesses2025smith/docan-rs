@@ -1,6 +1,6 @@
 [package]
 name = "docan"
-version = "0.1.0-alpha3"
+version = "0.1.0-alpha5"
 edition = "2021"
 license = "MIT OR GPL-3.0"
 authors = ["Jesse Smith <zhuyu4839@gmail.com>"]
@@ -30,20 +30,21 @@ crate-type = ["lib", "cdylib", ]
 name = "docan_rs"
 
 [dependencies]
-log = "0.4"
-thiserror = "2"
 hex = "0.4"
+log = "0.4"
+rsutil = { version = "0.1", features = ["log", "types"] }
+thiserror = "2"
 
 [dependencies.rs-can]
-version = "0.2.0"
+version = "0.2.2"
 
 [dependencies.iso14229-1]
-version = "0.1.0-alpha4"
+version = "0.1.0-alpha8"
 default-features = false
 optional = true
 
 [dependencies.iso15765-2 ]
-version = "0.1.0-alpha5"
+version = "0.1.0-alpha8"
 default-features = false
 
 #[dependencies.tokio]
