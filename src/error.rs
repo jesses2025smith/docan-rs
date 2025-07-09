@@ -1,5 +1,5 @@
+use iso14229_1::{response::Code, Iso14229Error, Service};
 use iso15765_2::IsoTpError;
-use iso14229_1::{Iso14229Error, Service, response::Code};
 use rs_can::CanError;
 
 #[derive(thiserror::Error, Debug)]
@@ -11,7 +11,11 @@ pub enum DoCanError {
     ISO14229Error(Iso14229Error),
 
     #[error("DoCAN - service `{service}` got an unexpected sub-function(expect: {expect}, actual: {actual})")]
-    UnexpectedSubFunction { service: Service, expect: u8, actual: u8 },
+    UnexpectedSubFunction {
+        service: Service,
+        expect: u8,
+        actual: u8,
+    },
 
     #[error("DoCAN - service `{expect}` got an unexpect response `{actual}`")]
     UnexpectedResponse { expect: Service, actual: Service },

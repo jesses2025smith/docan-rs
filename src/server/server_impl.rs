@@ -1,8 +1,7 @@
-use std::{fmt::Display, hash::Hash};
+use crate::{DoCanError, Server, server::context::{Context, IsoTpListener}};
 use iso15765_2::{Address, CanAdapter, CanIsoTp};
 use rs_can::{CanDevice, CanFrame, CanResult};
-use crate::{DoCanError, Server};
-use super::context::{Context, IsoTpListener};
+use std::{fmt::Display, hash::Hash};
 
 #[derive(Clone)]
 pub struct DoCanServer<D, C, F> {
@@ -14,7 +13,7 @@ impl<D, C, F> DoCanServer<D, C, F>
 where
     D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Display + Clone + Hash + Eq + 'static,
-    F: CanFrame<Channel = C> + Clone + Send + Display + 'static
+    F: CanFrame<Channel = C> + Clone + Send + Display + 'static,
 {
     pub fn new(adapter: CanAdapter<D, C, F>, channel: C, address: Address) -> Self {
         let listener = IsoTpListener {
@@ -26,10 +25,7 @@ where
             adapter.sender(),
             Box::new(listener.clone()),
         );
-        adapter.register_listener(
-            format!("DoCANServer-{}", channel),
-            Box::new(iso_tp.clone()),
-        );
+        adapter.register_listener(format!("DoCANServer-{}", channel), Box::new(iso_tp.clone()));
         Self {
             adapter,
             context: Context::new(iso_tp, listener),
@@ -45,7 +41,7 @@ where
 impl<D, C, F> Server for DoCanServer<D, C, F>
 where
     C: Display + Clone,
-    F: CanFrame<Channel = C>
+    F: CanFrame<Channel = C>,
 {
     type Channel = C;
     type Device = D;

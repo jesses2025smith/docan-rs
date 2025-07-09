@@ -1,5 +1,5 @@
-use iso14229_1::{Service, SessionType};
 use crate::server::util;
+use iso14229_1::{Service, SessionType};
 
 /// Session manager.
 #[derive(Debug, Default, Clone)]
@@ -38,11 +38,10 @@ impl SessionManager {
                 Service::WriteDID => {
                     if self.session_type == SessionType::Default {
                         Some(util::service_not_support_in_session(service))
-                    }
-                    else {
+                    } else {
                         None
                     }
-                },
+                }
                 Service::IOCtrl => todo!(),
                 Service::RoutineCtrl => todo!(),
                 Service::RequestDownload => todo!(),
@@ -60,7 +59,7 @@ impl SessionManager {
                 Service::LinkCtrl => todo!(),
                 Service::NRC => Some(util::service_not_support(service.into())),
             },
-            Err(_) => Some(util::service_not_support(service))
+            Err(_) => Some(util::service_not_support(service)),
         }
     }
 }

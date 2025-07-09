@@ -1,5 +1,9 @@
-use std::{collections::VecDeque, sync::{Arc, Mutex}};
 use iso15765_2::IsoTpEvent;
+use std::{
+    collections::VecDeque,
+    sync::Arc,
+};
+use tokio::sync::Mutex;
 
 #[derive(Debug, Default, Clone)]
 pub struct IsoTpBuffer {
@@ -7,34 +11,18 @@ pub struct IsoTpBuffer {
 }
 
 impl IsoTpBuffer {
-    #[inline]
-    pub fn clear(&self) {
-        match self.inner.lock() {
-            Ok(mut buffer) => buffer.clear(),
-            Err(_) => {
-                rsutil::warn!("DoCAN - failed to acquire write lock for `IsoTpBuffer::clear`");
-            },
-        }
+    #[inline(always)]
+    pub async fn clear(&self) {
+        self.inner.lock().await.clear();
+    }
+
+    #[inline(always)]
+    pub async fn set(&self, event: IsoTpEvent) {
+        self.inner.lock().await.push_back(event);
     }
 
     #[inline]
-    pub fn set(&self, event: IsoTpEvent) {
-        match self.inner.lock() {
-            Ok(mut buffer) => buffer.push_back(event),
-            Err(_) => {
-                rsutil::warn!("DoCAN - failed to acquire write lock for `IsoTpBuffer::set`");
-            },
-        }
-    }
-
-    #[inline]
-    pub fn get(&self) -> Option<IsoTpEvent> {
-        match self.inner.lock() {
-            Ok(mut buffer) => buffer.pop_front(),
-            Err(_) => {
-                rsutil::warn!("DoCAN - failed to acquire write lock for `IsoTpBuffer::get`");
-                None
-            },
-        }
+    pub async fn get(&self) -> Option<IsoTpEvent> {
+        self.inner.lock().await.pop_front()
     }
 }
