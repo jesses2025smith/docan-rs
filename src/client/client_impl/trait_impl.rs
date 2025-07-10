@@ -107,7 +107,7 @@ where
                 Self::sub_func_check(&response, r#type.into(), service)?;
 
                 let timing = response
-                    .data::<response::SessionCtrl>()
+                    .data::<response::SessionCtrl>(&did)
                     .map_err(DoCanError::ISO14229Error)?
                     .0;
                 listener
@@ -149,7 +149,7 @@ where
                 Self::sub_func_check(&response, r#type.into(), service)?;
 
                 let resp = response
-                    .data::<response::ECUReset>()
+                    .data::<response::ECUReset>(&did)
                     .map_err(DoCanError::ISO14229Error)?;
                 if let Some(seconds) = resp.second {
                     sleep(Duration::from_secs(seconds as u64)).await;
@@ -298,7 +298,7 @@ where
                 Self::sub_func_check(&response, auth_task.into(), service)?;
 
                 response
-                    .data::<response::Authentication>()
+                    .data::<response::Authentication>(&did)
                     .map_err(DoCanError::ISO14229Error)
             }
         })
@@ -409,7 +409,7 @@ where
                 .await?;
 
                 response
-                    .data::<response::SecuredDataTrans>()
+                    .data::<response::SecuredDataTrans>(&did)
                     .map_err(DoCanError::ISO14229Error)
             }
         })
@@ -522,7 +522,7 @@ where
                 .await?;
 
                 response
-                    .data_with_config::<response::ReadDID>(&cfg)
+                    .data::<response::ReadDID>(&cfg)
                     .map_err(DoCanError::ISO14229Error)
             }
         })
@@ -563,7 +563,7 @@ where
                     .await?;
 
             response
-                .data::<response::ReadScalingDID>()
+                .data::<response::ReadScalingDID>(&cfg)
                 .map_err(DoCanError::ISO14229Error)
         })
         .await
@@ -593,7 +593,7 @@ where
                 .await?;
 
                 response
-                    .data::<response::ReadDataByPeriodId>()
+                    .data::<response::ReadDataByPeriodId>(&cfg)
                     .map_err(DoCanError::ISO14229Error)
             }
         })
@@ -631,7 +631,7 @@ where
                 match response {
                     Some(v) => {
                         Self::sub_func_check(&v, r#type.into(), service)?;
-                        Ok(Some(v.data().map_err(DoCanError::ISO14229Error)?))
+                        Ok(Some(v.data(&did).map_err(DoCanError::ISO14229Error)?))
                     }
                     None => Ok(None),
                 }
@@ -694,7 +694,7 @@ where
                 .await?;
 
                 response
-                    .data::<response::WriteMemByAddr>()
+                    .data::<response::WriteMemByAddr>(&did)
                     .map_err(DoCanError::ISO14229Error)
             }
         })
@@ -752,7 +752,7 @@ where
                 Self::sub_func_check(&response, r#type.into(), service)?;
 
                 response
-                    .data::<response::DTCInfo>()
+                    .data::<response::DTCInfo>(&did)
                     .map_err(DoCanError::ISO14229Error)
             }
             .await
@@ -787,7 +787,7 @@ where
                 .await?;
 
                 response
-                    .data::<response::IOCtrl>()
+                    .data::<response::IOCtrl>(&cfg)
                     .map_err(DoCanError::ISO14229Error)
             }
         })
@@ -823,7 +823,7 @@ where
                 Self::sub_func_check(&response, r#type.into(), service)?;
 
                 response
-                    .data::<response::RoutineCtrl>()
+                    .data::<response::RoutineCtrl>(&did)
                     .map_err(DoCanError::ISO14229Error)
             }
         })
@@ -852,7 +852,7 @@ where
                     .await?;
 
             response
-                .data::<response::RequestDownload>()
+                .data::<response::RequestDownload>(&did)
                 .map_err(DoCanError::ISO14229Error)
         })
         .await
@@ -880,7 +880,7 @@ where
                     .await?;
 
             response
-                .data::<response::RequestUpload>()
+                .data::<response::RequestUpload>(&did)
                 .map_err(DoCanError::ISO14229Error)
         })
         .await
@@ -909,7 +909,7 @@ where
                 .await?;
 
                 let data = response
-                    .data::<response::TransferData>()
+                    .data::<response::TransferData>(&did)
                     .map_err(DoCanError::ISO14229Error)?;
 
                 if data.sequence != sequence {
@@ -977,7 +977,7 @@ where
                 Self::sub_func_check(&response, operation.into(), service)?;
 
                 response
-                    .data::<response::RequestFileTransfer>()
+                    .data::<response::RequestFileTransfer>(&did)
                     .map_err(DoCanError::ISO14229Error)
             }
         })
