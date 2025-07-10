@@ -1,8 +1,5 @@
 use iso15765_2::IsoTpEvent;
-use std::{
-    collections::VecDeque,
-    sync::Arc,
-};
+use std::{collections::VecDeque, sync::Arc};
 use tokio::sync::Mutex;
 
 #[derive(Debug, Default, Clone)]
@@ -21,7 +18,7 @@ impl IsoTpBuffer {
         self.inner.lock().await.push_back(event);
     }
 
-    #[inline]
+    #[inline(always)]
     pub async fn get(&self) -> Option<IsoTpEvent> {
         self.inner.lock().await.pop_front()
     }

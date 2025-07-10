@@ -3,8 +3,6 @@ use crate::{
     error::DoCanError,
     SecurityAlgo,
 };
-#[cfg(any(feature = "std2006", feature = "std2013"))]
-use iso14229_1::request::TimingParameterAccessType;
 use iso14229_1::{
     request::{self, Request},
     response,
@@ -14,7 +12,6 @@ use iso14229_1::{
 use iso15765_2::{Address, AddressType};
 use rs_can::{CanDevice, CanFrame, CanResult};
 use std::{fmt::Display, hash::Hash, time::Duration};
-use std::ops::Deref;
 use tokio::time::sleep;
 
 #[async_trait::async_trait]
@@ -22,7 +19,7 @@ impl<D, C, F> Client for DoCanClient<D, C, F>
 where
     D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
     C: Display + Clone + Hash + Eq + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync  + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
 {
     type Channel = C;
     type Error = DoCanError;
@@ -32,11 +29,12 @@ where
         channel: Self::Channel,
         address: Address,
     ) -> CanResult<(), Self::Error> {
-        self.context_util(channel, |ctx| async move {
-            ctx.iso_tp.lock().await.update_address(address).await;
+        self.with_context(channel, |_, iso_tp, _| async move {
+            iso_tp.update_address(address).await;
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     async fn update_security_algo(
@@ -49,7 +47,8 @@ where
             *guard = Some(algo);
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     async fn add_data_identifier(
@@ -62,7 +61,8 @@ where
             ctx.did.lock().await.insert(did, length);
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     async fn remove_data_identifier(
@@ -74,7 +74,8 @@ where
             ctx.did.lock().await.remove(&did);
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     async fn session_ctrl(
@@ -84,17 +85,24 @@ where
         suppress_positive: bool,
         addr_type: AddressType,
     ) -> CanResult<(), Self::Error> {
-        self.context_util(channel, |ctx| async move {
+        self.with_context(channel, |listener, iso_tp, did| async move {
             let service = Service::SessionCtrl;
             let mut sub_func: u8 = r#type.into();
             if suppress_positive {
                 sub_func |= SUPPRESS_POSITIVE;
             }
-            let request = Request::new(service, Some(sub_func), vec![], &*ctx.did.lock().await)
+            let request = Request::new(service, Some(sub_func), vec![], &did)
                 .map_err(DoCanError::ISO14229Error)?;
 
-            if let Some(response) =
-                Self::suppress_positive_sr(&ctx, addr_type, request, suppress_positive).await?
+            if let Some(response) = Self::suppress_positive_sr(
+                &listener,
+                &iso_tp,
+                &did,
+                addr_type,
+                request,
+                suppress_positive,
+            )
+            .await?
             {
                 Self::sub_func_check(&response, r#type.into(), service)?;
 
@@ -102,11 +110,14 @@ where
                     .data::<response::SessionCtrl>()
                     .map_err(DoCanError::ISO14229Error)?
                     .0;
-                ctx.listener.lock().await.update_p2_ctx(timing.p2, timing.p2_star as u32);
+                listener
+                    .update_p2_ctx(timing.p2, timing.p2_star as u32)
+                    .await;
             }
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     async fn ecu_reset(
@@ -116,17 +127,24 @@ where
         suppress_positive: bool,
         addr_type: AddressType,
     ) -> CanResult<(), Self::Error> {
-        self.context_util(channel, |ctx| async move {
+        self.with_context(channel, |listener, iso_tp, did| async move {
             let service = Service::ECUReset;
             let mut sub_func: u8 = r#type.into();
             if suppress_positive {
                 sub_func |= SUPPRESS_POSITIVE;
             }
-            let request = Request::new(service, Some(sub_func), vec![], &*ctx.did.lock().await)
+            let request = Request::new(service, Some(sub_func), vec![], &did)
                 .map_err(DoCanError::ISO14229Error)?;
 
-            if let Some(response) =
-                Self::suppress_positive_sr(&ctx, addr_type, request, suppress_positive).await?
+            if let Some(response) = Self::suppress_positive_sr(
+                &listener,
+                &iso_tp,
+                &did,
+                addr_type,
+                request,
+                suppress_positive,
+            )
+            .await?
             {
                 Self::sub_func_check(&response, r#type.into(), service)?;
 
@@ -139,7 +157,8 @@ where
             }
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     async fn security_access(
@@ -148,20 +167,28 @@ where
         level: u8,
         params: Vec<u8>,
     ) -> CanResult<Vec<u8>, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| {
             let params = params.clone();
             async move {
                 let service = Service::SecurityAccess;
-                let request = Request::new(service, Some(level), params, &*ctx.did.lock().await)
+                let request = Request::new(service, Some(level), params, &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
 
                 Self::sub_func_check(&response, level, service)?;
 
                 Ok(response.raw_data().to_vec())
             }
-        }).await
+        })
+        .await
     }
 
     async fn unlock_security_access(
@@ -171,35 +198,40 @@ where
         params: Vec<u8>,
         salt: Vec<u8>,
     ) -> CanResult<(), Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_security_algo_ctx(channel, |listener, iso_tp, did, algo| {
             let params = params.clone();
             let salt = salt.clone();
             async move {
-                if let Some(algo) = ctx.security_algo.lock().await.deref() {
-                    let service = Service::SecurityAccess;
-                    let req = Request::new(service, Some(level), params, &*ctx.did.lock().await)
-                        .map_err(DoCanError::ISO14229Error)?;
+                let service = Service::SecurityAccess;
+                let req = Request::new(service, Some(level), params, &did)
+                    .map_err(DoCanError::ISO14229Error)?;
 
-                    let resp = Self::send_and_response(&ctx, AddressType::Physical, req).await?;
-                    Self::sub_func_check(&resp, level, service)?;
+                let resp =
+                    Self::send_and_response(&listener, &iso_tp, &did, AddressType::Physical, req)
+                        .await?;
+                Self::sub_func_check(&resp, level, service)?;
 
-                    let seed = resp.raw_data().to_vec();
-                    match algo(level, seed, salt)? {
-                        Some(data) => {
-                            let request = Request::new(service, Some(level + 1), data, &*ctx.did.lock().await)
-                                .map_err(DoCanError::ISO14229Error)?;
-                            let response =
-                                Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let seed = resp.raw_data().to_vec();
+                match algo(level, seed, salt)? {
+                    Some(data) => {
+                        let request = Request::new(service, Some(level + 1), data, &did)
+                            .map_err(DoCanError::ISO14229Error)?;
+                        let response = Self::send_and_response(
+                            &listener,
+                            &iso_tp,
+                            &did,
+                            AddressType::Physical,
+                            request,
+                        )
+                        .await?;
 
-                            Self::sub_func_check(&response, level + 1, service)
-                        }
-                        None => Ok(()),
+                        Self::sub_func_check(&response, level + 1, service)
                     }
-                } else {
-                    Err(DoCanError::OtherError("security algorithm required".into()))
+                    None => Ok(()),
                 }
             }
-        }).await
+        })
+        .await
     }
 
     async fn communication_control(
@@ -211,7 +243,7 @@ where
         suppress_positive: bool,
         addr_type: AddressType,
     ) -> CanResult<(), Self::Error> {
-        self.context_util(channel, |ctx| async move {
+        self.with_context(channel, |listener, iso_tp, did| async move {
             let service = Service::CommunicationCtrl;
             let mut sub_func = ctrl_type.into();
             if suppress_positive {
@@ -219,22 +251,26 @@ where
             }
             let data = request::CommunicationCtrl::new(ctrl_type, comm_type, node_id)
                 .map_err(DoCanError::ISO14229Error)?;
-            let req = Request::new(
-                service,
-                Some(sub_func),
-                data.into(),
-                &*ctx.did.lock().await,
-            )
-            .map_err(DoCanError::ISO14229Error)?;
+            let req = Request::new(service, Some(sub_func), data.into(), &did)
+                .map_err(DoCanError::ISO14229Error)?;
 
-            let resp = Self::suppress_positive_sr(&ctx, addr_type, req, suppress_positive).await?;
+            let resp = Self::suppress_positive_sr(
+                &listener,
+                &iso_tp,
+                &did,
+                addr_type,
+                req,
+                suppress_positive,
+            )
+            .await?;
 
             if let Some(response) = resp {
                 Self::sub_func_check(&response, ctrl_type.into(), service)?;
             }
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     #[cfg(feature = "std2020")]
@@ -244,26 +280,29 @@ where
         auth_task: AuthenticationTask,
         data: request::Authentication,
     ) -> CanResult<response::Authentication, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| {
             let data = data.clone();
             async move {
                 let service = Service::Authentication;
-                let request = Request::new(
-                    service,
-                    Some(auth_task.into()),
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let request = Request::new(service, Some(auth_task.into()), data.into(), &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
                 Self::sub_func_check(&response, auth_task.into(), service)?;
 
                 response
                     .data::<response::Authentication>()
                     .map_err(DoCanError::ISO14229Error)
             }
-        }).await
+        })
+        .await
     }
 
     async fn tester_present(
@@ -273,49 +312,65 @@ where
         suppress_positive: bool,
         addr_type: AddressType,
     ) -> CanResult<(), Self::Error> {
-        self.context_util(channel, |ctx| async move {
-            let (service, request) = Self::tester_present_request(&ctx, r#type, suppress_positive).await?;
+        self.with_context(channel, |listener, iso_tp, did| async move {
+            let (service, request) =
+                Self::tester_present_request(&did, r#type, suppress_positive).await?;
 
-            let response = Self::suppress_positive_sr(&ctx, addr_type, request, suppress_positive).await?;
+            let response = Self::suppress_positive_sr(
+                &listener,
+                &iso_tp,
+                &did,
+                addr_type,
+                request,
+                suppress_positive,
+            )
+            .await?;
 
             if let Some(response) = response {
                 Self::sub_func_check(&response, r#type.into(), service)?;
             }
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     #[cfg(any(feature = "std2006", feature = "std2013"))]
     async fn access_timing_parameter(
         &mut self,
         channel: Self::Channel,
-        r#type: TimingParameterAccessType,
+        r#type: request::TimingParameterAccessType,
         parameter: Vec<u8>,
         suppress_positive: bool,
     ) -> CanResult<Option<response::AccessTimingParameter>, Self::Error> {
-        self.context_util(channel, |ctx| async move {
+        self.with_context(channel, |listener, iso_tp, did| async move {
             let service = Service::AccessTimingParam;
             let mut sub_func = r#type.into();
             if suppress_positive {
                 sub_func |= SUPPRESS_POSITIVE;
             }
-            let request = Request::new(service, Some(sub_func), parameter, &*ctx.did.lock().await)
+            let request = Request::new(service, Some(sub_func), parameter, &did)
                 .map_err(DoCanError::ISO14229Error)?;
 
-            let response =
-                Self::suppress_positive_sr(&ctx, AddressType::Physical, request, suppress_positive).await?;
+            let response = Self::suppress_positive_sr(
+                &listener,
+                &iso_tp,
+                &did,
+                AddressType::Physical,
+                request,
+                suppress_positive,
+            )
+            .await?;
 
             match response {
                 Some(v) => {
                     Self::sub_func_check(&v, r#type.into(), service)?;
-                    Ok(Some(
-                        v.data().map_err(DoCanError::ISO14229Error)?,
-                    ))
+                    Ok(Some(v.data().map_err(DoCanError::ISO14229Error)?))
                 }
                 None => Ok(None),
             }
-        }).await
+        })
+        .await
     }
 
     async fn secured_data_transmit(
@@ -328,7 +383,7 @@ where
         service_data: Vec<u8>,
         signature_data: Vec<u8>,
     ) -> CanResult<response::SecuredDataTrans, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| {
             let service_data = service_data.clone();
             let signature_data = signature_data.clone();
             async move {
@@ -340,22 +395,25 @@ where
                     service_data,
                     signature_data,
                 )
-                    .map_err(DoCanError::ISO14229Error)?;
-                let request = Request::new(
-                    Service::SecuredDataTrans,
-                    None,
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                .map_err(DoCanError::ISO14229Error)?;
+                let request = Request::new(Service::SecuredDataTrans, None, data.into(), &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
 
                 response
                     .data::<response::SecuredDataTrans>()
                     .map_err(DoCanError::ISO14229Error)
             }
-        }).await
+        })
+        .await
     }
 
     async fn control_dtc_setting(
@@ -365,7 +423,7 @@ where
         parameter: Vec<u8>,
         suppress_positive: bool,
     ) -> CanResult<(), Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| {
             let parameter = parameter.clone();
             async move {
                 let service = Service::CtrlDTCSetting;
@@ -373,11 +431,18 @@ where
                 if suppress_positive {
                     sub_func |= SUPPRESS_POSITIVE;
                 }
-                let request = Request::new(service, Some(sub_func), parameter, &*ctx.did.lock().await)
+                let request = Request::new(service, Some(sub_func), parameter, &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response =
-                    Self::suppress_positive_sr(&ctx, AddressType::Physical, request, suppress_positive).await?;
+                let response = Self::suppress_positive_sr(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                    suppress_positive,
+                )
+                .await?;
 
                 if let Some(response) = response {
                     Self::sub_func_check(&response, r#type.into(), service)?;
@@ -385,13 +450,15 @@ where
 
                 Ok(())
             }
-        }).await
+        })
+        .await
     }
 
     async fn response_on_event(&mut self, channel: Self::Channel) -> CanResult<(), Self::Error> {
-        self.context_util(channel, |_| async move {
+        self.with_context(channel, |_, _, _| async move {
             Err(DoCanError::NotImplement(Service::ResponseOnEvent))
-        }).await
+        })
+        .await
     }
 
     async fn link_control(
@@ -401,7 +468,7 @@ where
         data: request::LinkCtrl,
         suppress_positive: bool,
     ) -> CanResult<(), Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| {
             let data = data.clone();
             async move {
                 let service = Service::LinkCtrl;
@@ -409,16 +476,18 @@ where
                 if suppress_positive {
                     sub_func |= SUPPRESS_POSITIVE;
                 }
-                let request = Request::new(
-                    service,
-                    Some(sub_func),
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let request = Request::new(service, Some(sub_func), data.into(), &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response =
-                    Self::suppress_positive_sr(&ctx, AddressType::Physical, request, suppress_positive).await?;
+                let response = Self::suppress_positive_sr(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                    suppress_positive,
+                )
+                .await?;
 
                 if let Some(response) = response {
                     Self::sub_func_check(&response, r#type.into(), service)?;
@@ -426,7 +495,8 @@ where
 
                 Ok(())
             }
-        }).await
+        })
+        .await
     }
 
     async fn read_data_by_identifier(
@@ -435,25 +505,28 @@ where
         did: DataIdentifier,
         others: Vec<DataIdentifier>,
     ) -> CanResult<response::ReadDID, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, cfg| {
             let others = others.clone();
             async move {
                 let data = request::ReadDID::new(did, others);
-                let request = Request::new(
-                    Service::ReadDID,
-                    None,
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let request = Request::new(Service::ReadDID, None, data.into(), &cfg)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &cfg,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
 
                 response
-                    .data_with_config::<response::ReadDID>(&*ctx.did.lock().await)
+                    .data_with_config::<response::ReadDID>(&cfg)
                     .map_err(DoCanError::ISO14229Error)
             }
-        }).await
+        })
+        .await
     }
 
     async fn read_memory_by_address(
@@ -461,20 +534,18 @@ where
         channel: Self::Channel,
         mem_loc: MemoryLocation,
     ) -> CanResult<Vec<u8>, Self::Error> {
-        self.context_util(channel, |ctx| async move {
+        self.with_context(channel, |listener, iso_tp, did| async move {
             let data = request::ReadMemByAddr(mem_loc);
-            let request = Request::new(
-                Service::ReadMemByAddr,
-                None,
-                data.into(),
-                &*ctx.did.lock().await,
-            )
-            .map_err(DoCanError::ISO14229Error)?;
+            let request = Request::new(Service::ReadMemByAddr, None, data.into(), &did)
+                .map_err(DoCanError::ISO14229Error)?;
 
-            let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+            let response =
+                Self::send_and_response(&listener, &iso_tp, &did, AddressType::Physical, request)
+                    .await?;
 
             Ok(response.raw_data().to_vec())
-        }).await
+        })
+        .await
     }
 
     async fn read_scaling_data_by_identifier(
@@ -482,22 +553,20 @@ where
         channel: Self::Channel,
         did: DataIdentifier,
     ) -> CanResult<response::ReadScalingDID, Self::Error> {
-        self.context_util(channel, |ctx| async move {
+        self.with_context(channel, |listener, iso_tp, cfg| async move {
             let data = request::ReadScalingDID(did);
-            let request = Request::new(
-                Service::ReadScalingDID,
-                None,
-                data.into(),
-                &*ctx.did.lock().await,
-            )
-            .map_err(DoCanError::ISO14229Error)?;
+            let request = Request::new(Service::ReadScalingDID, None, data.into(), &cfg)
+                .map_err(DoCanError::ISO14229Error)?;
 
-            let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+            let response =
+                Self::send_and_response(&listener, &iso_tp, &cfg, AddressType::Physical, request)
+                    .await?;
 
             response
                 .data::<response::ReadScalingDID>()
                 .map_err(DoCanError::ISO14229Error)
-        }).await
+        })
+        .await
     }
 
     async fn read_data_by_period_identifier(
@@ -506,26 +575,29 @@ where
         mode: request::TransmissionMode,
         did: Vec<u8>,
     ) -> CanResult<response::ReadDataByPeriodId, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, cfg| {
             let did = did.clone();
             async move {
-                let data =
-                    request::ReadDataByPeriodId::new(mode, did).map_err(DoCanError::ISO14229Error)?;
-                let request = Request::new(
-                    Service::ReadDataByPeriodId,
-                    None,
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let data = request::ReadDataByPeriodId::new(mode, did)
+                    .map_err(DoCanError::ISO14229Error)?;
+                let request = Request::new(Service::ReadDataByPeriodId, None, data.into(), &cfg)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &cfg,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
 
                 response
                     .data::<response::ReadDataByPeriodId>()
                     .map_err(DoCanError::ISO14229Error)
             }
-        }).await
+        })
+        .await
     }
 
     async fn dynamically_define_data_by_identifier(
@@ -535,7 +607,7 @@ where
         data: request::DynamicallyDefineDID,
         suppress_positive: bool,
     ) -> CanResult<Option<response::DynamicallyDefineDID>, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| {
             let data = data.clone();
             async move {
                 let service = Service::DynamicalDefineDID;
@@ -543,28 +615,29 @@ where
                 if suppress_positive {
                     sub_func |= SUPPRESS_POSITIVE;
                 }
-                let request = Request::new(
-                    service,
-                    Some(sub_func),
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let request = Request::new(service, Some(sub_func), data.into(), &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response =
-                    Self::suppress_positive_sr(&ctx, AddressType::Physical, request, suppress_positive).await?;
+                let response = Self::suppress_positive_sr(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                    suppress_positive,
+                )
+                .await?;
 
                 match response {
                     Some(v) => {
                         Self::sub_func_check(&v, r#type.into(), service)?;
-                        Ok(Some(
-                            v.data().map_err(DoCanError::ISO14229Error)?,
-                        ))
+                        Ok(Some(v.data().map_err(DoCanError::ISO14229Error)?))
                     }
                     None => Ok(None),
                 }
             }
-        }).await
+        })
+        .await
     }
 
     async fn write_data_by_identifier(
@@ -573,23 +646,26 @@ where
         did: DataIdentifier,
         data: Vec<u8>,
     ) -> CanResult<(), Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, cfg| {
             let data = data.clone();
             async move {
                 let data = request::WriteDID(DIDData { did, data });
-                let request = Request::new(
-                    Service::WriteDID,
-                    None,
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let request = Request::new(Service::WriteDID, None, data.into(), &cfg)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let _ = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let _ = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &cfg,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
 
                 Ok(())
             }
-        }).await
+        })
+        .await
     }
 
     async fn write_memory_by_address(
@@ -600,26 +676,29 @@ where
         mem_size: u128,
         record: Vec<u8>,
     ) -> CanResult<response::WriteMemByAddr, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| {
             let record = record.clone();
             async move {
                 let data = request::WriteMemByAddr::new(alfi, mem_addr, mem_size, record)
                     .map_err(DoCanError::ISO14229Error)?;
-                let request = Request::new(
-                    Service::WriteMemByAddr,
-                    None,
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let request = Request::new(Service::WriteMemByAddr, None, data.into(), &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
 
                 response
                     .data::<response::WriteMemByAddr>()
                     .map_err(DoCanError::ISO14229Error)
             }
-        }).await
+        })
+        .await
     }
 
     async fn clear_dtc_info(
@@ -629,26 +708,24 @@ where
         mem_sel: Option<u8>,
         addr_type: AddressType,
     ) -> CanResult<(), Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| async move {
             let group = group.clone();
             async move {
                 #[cfg(any(feature = "std2020"))]
                 let data = request::ClearDiagnosticInfo::new(group, mem_sel);
                 #[cfg(any(feature = "std2006", feature = "std2013"))]
                 let data = request::ClearDiagnosticInfo::new(group);
-                let request = Request::new(
-                    Service::ClearDiagnosticInfo,
-                    None,
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let request = Request::new(Service::ClearDiagnosticInfo, None, data.into(), &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let _ = Self::send_and_response(&ctx, addr_type, request).await?;
+                let _ =
+                    Self::send_and_response(&listener, &iso_tp, &did, addr_type, request).await?;
 
                 Ok(())
             }
-        }).await
+            .await
+        })
+        .await
     }
 
     async fn read_dtc_info(
@@ -657,26 +734,30 @@ where
         r#type: DTCReportType,
         data: request::DTCInfo,
     ) -> CanResult<response::DTCInfo, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| async move {
             let data = data.clone();
             async move {
                 let service = Service::ReadDTCInfo;
-                let request = Request::new(
-                    service,
-                    Some(r#type.into()),
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let request = Request::new(service, Some(r#type.into()), data.into(), &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
                 Self::sub_func_check(&response, r#type.into(), service)?;
 
                 response
                     .data::<response::DTCInfo>()
                     .map_err(DoCanError::ISO14229Error)
             }
-        }).await
+            .await
+        })
+        .await
     }
 
     async fn io_control(
@@ -687,23 +768,30 @@ where
         state: Vec<u8>,
         mask: Vec<u8>,
     ) -> CanResult<response::IOCtrl, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, cfg| {
             let state = state.clone();
             let mask = mask.clone();
             async move {
-                let data = request::IOCtrl::new(did, param, state, mask, &*ctx.did.lock().await)
+                let data = request::IOCtrl::new(did, param, state, mask, &cfg)
                     .map_err(DoCanError::ISO14229Error)?;
-                let request =
-                    Request::new(Service::IOCtrl, None, data.into(), &*ctx.did.lock().await)
-                        .map_err(DoCanError::ISO14229Error)?;
+                let request = Request::new(Service::IOCtrl, None, data.into(), &cfg)
+                    .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &cfg,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
 
                 response
                     .data::<response::IOCtrl>()
                     .map_err(DoCanError::ISO14229Error)
             }
-        }).await
+        })
+        .await
     }
 
     async fn routine_control(
@@ -713,7 +801,7 @@ where
         routine_id: u16,
         option_record: Vec<u8>,
     ) -> CanResult<response::RoutineCtrl, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| {
             let option_record = option_record.clone();
             async move {
                 let service = Service::RoutineCtrl;
@@ -721,22 +809,25 @@ where
                     routine_id: RoutineId(routine_id),
                     option_record,
                 };
-                let request = Request::new(
-                    service,
-                    Some(r#type.into()),
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let request = Request::new(service, Some(r#type.into()), data.into(), &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
                 Self::sub_func_check(&response, r#type.into(), service)?;
 
                 response
                     .data::<response::RoutineCtrl>()
                     .map_err(DoCanError::ISO14229Error)
             }
-        }).await
+        })
+        .await
     }
 
     async fn request_download(
@@ -747,26 +838,24 @@ where
         mem_size: u128,
         dfi: Option<DataFormatIdentifier>,
     ) -> CanResult<response::RequestDownload, Self::Error> {
-        self.context_util(channel, |ctx| async move {
+        self.with_context(channel, |listener, iso_tp, did| async move {
             let data = request::RequestDownload {
                 dfi: dfi.unwrap_or_default(),
                 mem_loc: MemoryLocation::new(alfi, mem_addr, mem_size)
                     .map_err(DoCanError::ISO14229Error)?,
             };
-            let request = Request::new(
-                Service::RequestDownload,
-                None,
-                data.into(),
-                &*ctx.did.lock().await,
-            )
-            .map_err(DoCanError::ISO14229Error)?;
+            let request = Request::new(Service::RequestDownload, None, data.into(), &did)
+                .map_err(DoCanError::ISO14229Error)?;
 
-            let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+            let response =
+                Self::send_and_response(&listener, &iso_tp, &did, AddressType::Physical, request)
+                    .await?;
 
             response
                 .data::<response::RequestDownload>()
                 .map_err(DoCanError::ISO14229Error)
-        }).await
+        })
+        .await
     }
 
     async fn request_upload(
@@ -777,26 +866,24 @@ where
         mem_size: u128,
         dfi: Option<DataFormatIdentifier>,
     ) -> CanResult<response::RequestUpload, Self::Error> {
-        self.context_util(channel, |ctx| async move {
+        self.with_context(channel, |listener, iso_tp, did| async move {
             let data = request::RequestUpload {
                 dfi: dfi.unwrap_or_default(),
                 mem_loc: MemoryLocation::new(alfi, mem_addr, mem_size)
                     .map_err(DoCanError::ISO14229Error)?,
             };
-            let request = Request::new(
-                Service::RequestDownload,
-                None,
-                data.into(),
-                &*ctx.did.lock().await,
-            )
-            .map_err(DoCanError::ISO14229Error)?;
+            let request = Request::new(Service::RequestDownload, None, data.into(), &did)
+                .map_err(DoCanError::ISO14229Error)?;
 
-            let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+            let response =
+                Self::send_and_response(&listener, &iso_tp, &did, AddressType::Physical, request)
+                    .await?;
 
             response
                 .data::<response::RequestUpload>()
                 .map_err(DoCanError::ISO14229Error)
-        }).await
+        })
+        .await
     }
 
     async fn transfer_data(
@@ -805,19 +892,21 @@ where
         sequence: u8,
         data: Vec<u8>,
     ) -> CanResult<response::TransferData, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| {
             let data = data.clone();
             async move {
                 let data = response::TransferData { sequence, data };
-                let request = Request::new(
-                    Service::TransferData,
-                    None,
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let request = Request::new(Service::TransferData, None, data.into(), &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
 
                 let data = response
                     .data::<response::TransferData>()
@@ -832,7 +921,8 @@ where
 
                 Ok(data)
             }
-        }).await
+        })
+        .await
     }
 
     async fn request_transfer_exit(
@@ -840,17 +930,25 @@ where
         channel: Self::Channel,
         parameter: Vec<u8>,
     ) -> CanResult<Vec<u8>, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| {
             let parameter = parameter.clone();
             async move {
-                let request = Request::new(Service::RequestTransferExit, None, parameter, &*ctx.did.lock().await)
+                let request = Request::new(Service::RequestTransferExit, None, parameter, &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
 
                 Ok(response.raw_data().to_vec())
             }
-        }).await
+        })
+        .await
     }
 
     #[cfg(any(feature = "std2013", feature = "std2020"))]
@@ -860,26 +958,29 @@ where
         operation: ModeOfOperation,
         data: request::RequestFileTransfer,
     ) -> CanResult<response::RequestFileTransfer, Self::Error> {
-        self.context_util(channel, |ctx| {
+        self.with_context(channel, |listener, iso_tp, did| {
             let data = data.clone();
             async move {
                 let service = Service::RequestFileTransfer;
                 let sub_func = operation.into();
-                let request = Request::new(
-                    service,
-                    Some(sub_func),
-                    data.into(),
-                    &*ctx.did.lock().await,
-                )
+                let request = Request::new(service, Some(sub_func), data.into(), &did)
                     .map_err(DoCanError::ISO14229Error)?;
 
-                let response = Self::send_and_response(&ctx, AddressType::Physical, request).await?;
+                let response = Self::send_and_response(
+                    &listener,
+                    &iso_tp,
+                    &did,
+                    AddressType::Physical,
+                    request,
+                )
+                .await?;
                 Self::sub_func_check(&response, operation.into(), service)?;
 
                 response
                     .data::<response::RequestFileTransfer>()
                     .map_err(DoCanError::ISO14229Error)
             }
-        }).await
+        })
+        .await
     }
 }

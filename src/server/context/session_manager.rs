@@ -9,12 +9,12 @@ pub struct SessionManager {
 }
 
 impl SessionManager {
-    #[inline]
+    #[inline(always)]
     pub fn change_session(&mut self, r#type: SessionType) {
         self.session_type = r#type;
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn keep_session(&mut self) {
         // TODO
     }

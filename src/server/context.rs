@@ -18,19 +18,20 @@ pub struct IsoTpListener {
     pub(crate) buffer: IsoTpBuffer,
 }
 
+#[async_trait::async_trait]
 impl IsoTpEventListener for IsoTpListener {
-    #[inline]
-    fn buffer_data(&mut self) -> Option<IsoTpEvent> {
+    #[inline(always)]
+    async fn buffer_data(&mut self) -> Option<IsoTpEvent> {
         self.buffer.get()
     }
 
-    #[inline]
-    fn clear_buffer(&mut self) {
+    #[inline(always)]
+    async fn clear_buffer(&mut self) {
         self.buffer.clear();
     }
 
-    #[inline]
-    fn on_iso_tp_event(&mut self, event: IsoTpEvent) {
+    #[inline(always)]
+    async fn on_iso_tp_event(&mut self, event: IsoTpEvent) {
         self.buffer.set(event);
     }
 }
@@ -68,7 +69,7 @@ where
                     IsoTpEvent::Wait => self.session_manager.keep_session(),
                     IsoTpEvent::FirstFrameReceived => {} // nothing to do
                     IsoTpEvent::DataReceived(data) => {
-                        rsutil::trace!("DoCANServer - data received: {}", hex::encode(&data));
+                        // rsutil::trace!("DoCANServer - data received: {}", hex::encode(&data));
                         if data.is_empty() {
                             continue;
                         }
@@ -224,12 +225,12 @@ where
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     fn clear_diag_info(&mut self) {
         // TODO
     }
 
-    #[inline]
+    #[inline(always)]
     fn positive_response(&self, service: Service, sub_func: Option<u8>, data: Vec<u8>) -> Vec<u8> {
         match Response::new(service, sub_func, data, &self.config) {
             Ok(v) => v.into(),

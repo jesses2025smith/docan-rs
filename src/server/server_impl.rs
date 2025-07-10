@@ -1,4 +1,7 @@
-use crate::{DoCanError, Server, server::context::{Context, IsoTpListener}};
+use crate::{
+    server::context::{Context, IsoTpListener},
+    DoCanError, Server,
+};
 use iso15765_2::{Address, CanAdapter, CanIsoTp};
 use rs_can::{CanDevice, CanFrame, CanResult};
 use std::{fmt::Display, hash::Hash};
@@ -32,7 +35,7 @@ where
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn adapter(&self) -> &CanAdapter<D, C, F> {
         &self.adapter
     }
