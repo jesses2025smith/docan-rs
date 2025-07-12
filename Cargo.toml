@@ -1,12 +1,12 @@
 [package]
 name = "docan"
-version = "0.1.0-alpha5"
+version = "0.1.0-b0"
 edition = "2021"
 license = "MIT OR GPL-3.0"
-authors = ["Jesse Smith <zhuyu4839@gmail.com>"]
+authors = ["Jesse Smith <jesses2025smith@gmail.com>"]
 description = "A DoCAN protocol."
-homepage = "https://github.com/zhuyu4839/docan-rs"
-repository = "https://github.com/zhuyu4839/docan-rs"
+homepage = "https://github.com/jesses2025smith/docan-rs"
+repository = "https://github.com/jesses2025smith/docan-rs"
 keywords = [
     "automotive",
     "UDS",
@@ -30,23 +30,26 @@ name = "docan_rs"
 [dependencies]
 async-trait = "0.1"
 bytes = "1.10"
-hex = "0.4"
+#hex = "0.4"
 log = "0.4"
 rsutil = { version = "0.1", features = ["log", "types"] }
 thiserror = "2"
 tokio = { version = "1", features = ["time"] }
 
 [dependencies.rs-can]
-path = "../rust-can/rs-can"
-#version = "0.2.2"
+version = "0.3.0-b0"
 
 [dependencies.iso14229-1]
-path = "../iso-std-rs/iso14229-1"
-#version = "0.1.0-alpha8"
+version = "0.1.0-b0"
 default-features = false
 optional = true
 
 [dependencies.iso15765-2 ]
-path = "../iso-std-rs/iso15765-2"
+version = "0.1.0-b0"
 #version = "0.1.0-alpha8"
 default-features = false
+
+[dev-dependencies]
+anyhow = "1"
+socketcan-rs = { version = "0.3.0-b0" }
+tokio = { version = "1.40.0", features = ["macros", "rt-multi-thread"] }
