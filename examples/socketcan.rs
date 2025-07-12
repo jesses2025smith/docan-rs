@@ -1,5 +1,5 @@
 use docan_rs::{Client, DoCanClient};
-use iso14229_1::SessionType;
+use iso14229_1::{DataIdentifier, SessionType};
 use iso15765_2::{Address, AddressType, CanAdapter};
 use rs_can::DeviceBuilder;
 use rsutil::types::ByteOrder;
@@ -13,18 +13,26 @@ async fn main() -> anyhow::Result<()> {
 
     let device = builder.build::<SocketCan>()?;
     let mut adapter = CanAdapter::new(device);
-    let mut client = DoCanClient::new(adapter.clone(), Some(100));
+    let mut client = DoCanClient::new(adapter.clone(), None);
     client
         .init_channel(iface.clone(), Address::default(), ByteOrder::default())
         .await?;
+    client.add_data_identifier(iface.clone(), DataIdentifier::VIN, 17).await?;
     adapter.start(100).await;
 
     client
         .session_ctrl(
             iface.clone(),
-            SessionType::Default,
+            SessionType::Extended,
             false,
             AddressType::Functional,
+        )
+        .await?;
+    client
+        .write_data_by_identifier(
+            iface.clone(),
+            DataIdentifier::VIN,
+            "ABCDEF1234567890I".as_bytes().to_vec()
         )
         .await?;
 

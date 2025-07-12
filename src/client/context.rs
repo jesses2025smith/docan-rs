@@ -28,11 +28,13 @@ impl IsoTpListener {
 
 impl IsoTpListener {
     pub async fn async_timer(&self, response_pending: bool) -> Result<Bytes, IsoTpError> {
-        let p2_ctx = self.p2_ctx.lock().await;
-        let tov = if response_pending {
-            p2_ctx.p2_star_ms()
-        } else {
-            p2_ctx.p2_ms() + self.p2_offset
+        let tov = {
+            let p2_ctx = self.p2_ctx.lock().await;
+            if response_pending {
+                p2_ctx.p2_star_ms()
+            } else {
+                p2_ctx.p2_ms() + self.p2_offset
+            }
         };
 
         let timeout = Duration::from_millis(tov);
