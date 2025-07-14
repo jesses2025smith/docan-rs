@@ -14,68 +14,46 @@ pub trait Client {
     // type Device;
     type Error;
 
-    async fn update_address(
-        &mut self,
-        channel: Self::Channel,
-        address: Address,
-    ) -> CanResult<(), Self::Error>;
-    async fn update_security_algo(
-        &mut self,
-        channel: Self::Channel,
-        algo: SecurityAlgo,
-    ) -> CanResult<(), Self::Error>;
-    async fn add_data_identifier(
-        &mut self,
-        channel: Self::Channel,
-        did: DataIdentifier,
-        length: usize,
-    ) -> CanResult<(), Self::Error>;
-    async fn remove_data_identifier(
-        &mut self,
-        channel: Self::Channel,
-        did: DataIdentifier,
-    ) -> CanResult<(), Self::Error>;
+    fn channel(&self) -> Self::Channel;
+
+    async fn update_address(&self, address: Address);
+    async fn update_security_algo(&self, algo: SecurityAlgo);
+    async fn add_data_identifier(&self, did: DataIdentifier, length: usize);
+    async fn remove_data_identifier(&self, did: DataIdentifier);
     // async fn set_address_of_byte_order(
     //     &mut self,
-    //     channel: Self::Channel,
     //     bo: ByteOrder,
     // ) -> CanResult<(), Self::Error>;
     // async fn set_memory_size_of_byte_order(
     //     &mut self,
-    //     channel: Self::Channel,
     //     bo: ByteOrder,
     // ) -> CanResult<(), Self::Error>;
     /** - Diagnostic and communication management functional unit - **/
     async fn session_ctrl(
         &mut self,
-        channel: Self::Channel,
         r#type: SessionType,
         suppress_positive: bool,
         addr_type: AddressType,
     ) -> CanResult<(), Self::Error>;
     async fn ecu_reset(
         &mut self,
-        channel: Self::Channel,
         r#type: ECUResetType,
         suppress_positive: bool,
         addr_type: AddressType,
     ) -> CanResult<(), Self::Error>;
     async fn security_access(
         &mut self,
-        channel: Self::Channel,
         level: u8,
         params: Vec<u8>,
     ) -> CanResult<Vec<u8>, Self::Error>;
     async fn unlock_security_access(
         &mut self,
-        channel: Self::Channel,
         level: u8,
         params: Vec<u8>,
         salt: Vec<u8>,
     ) -> CanResult<(), Self::Error>;
     async fn communication_control(
         &mut self,
-        channel: Self::Channel,
         ctrl_type: CommunicationCtrlType,
         comm_type: CommunicationType,
         node_id: Option<request::NodeId>,
@@ -85,13 +63,11 @@ pub trait Client {
     #[cfg(feature = "std2020")]
     async fn authentication(
         &mut self,
-        channel: Self::Channel,
         auth_task: AuthenticationTask,
         data: request::Authentication,
     ) -> CanResult<response::Authentication, Self::Error>;
     async fn tester_present(
         &mut self,
-        channel: Self::Channel,
         r#type: TesterPresentType,
         suppress_positive: bool,
         addr_type: AddressType,
@@ -99,14 +75,12 @@ pub trait Client {
     #[cfg(any(feature = "std2006", feature = "std2013"))]
     async fn access_timing_parameter(
         &mut self,
-        channel: Self::Channel,
         r#type: TimingParameterAccessType,
         parameter: Vec<u8>,
         suppress_positive: bool,
     ) -> CanResult<Option<response::AccessTimingParameter>, Self::Error>;
     async fn secured_data_transmit(
         &mut self,
-        channel: Self::Channel,
         apar: AdministrativeParameter,
         signature: SignatureEncryptionCalculation,
         anti_replay_cnt: u16,
@@ -116,58 +90,49 @@ pub trait Client {
     ) -> CanResult<response::SecuredDataTrans, Self::Error>;
     async fn control_dtc_setting(
         &mut self,
-        channel: Self::Channel,
         r#type: DTCSettingType,
         parameter: Vec<u8>,
         suppress_positive: bool,
     ) -> CanResult<(), Self::Error>;
-    async fn response_on_event(&mut self, channel: Self::Channel) -> CanResult<(), Self::Error>;
+    async fn response_on_event(&mut self) -> CanResult<(), Self::Error>;
     async fn link_control(
         &mut self,
-        channel: Self::Channel,
         r#type: LinkCtrlType,
         data: request::LinkCtrl,
         suppress_positive: bool,
     ) -> CanResult<(), Self::Error>;
     async fn read_data_by_identifier(
         &mut self,
-        channel: Self::Channel,
         did: DataIdentifier,
         others: Vec<DataIdentifier>,
     ) -> CanResult<response::ReadDID, Self::Error>;
     async fn read_memory_by_address(
         &mut self,
-        channel: Self::Channel,
         mem_loc: MemoryLocation,
     ) -> CanResult<Vec<u8>, Self::Error>;
     async fn read_scaling_data_by_identifier(
         &mut self,
-        channel: Self::Channel,
         did: DataIdentifier,
     ) -> CanResult<response::ReadScalingDID, Self::Error>;
     /** - Data transmission functional unit - **/
     async fn read_data_by_period_identifier(
         &mut self,
-        channel: Self::Channel,
         mode: request::TransmissionMode,
         did: Vec<u8>,
     ) -> CanResult<response::ReadDataByPeriodId, Self::Error>;
     async fn dynamically_define_data_by_identifier(
         &mut self,
-        channel: Self::Channel,
         r#type: DefinitionType,
         data: request::DynamicallyDefineDID,
         suppress_positive: bool,
     ) -> CanResult<Option<response::DynamicallyDefineDID>, Self::Error>;
     async fn write_data_by_identifier(
         &mut self,
-        channel: Self::Channel,
         did: DataIdentifier,
         data: Vec<u8>,
     ) -> CanResult<(), Self::Error>;
     async fn write_memory_by_address(
         &mut self,
-        channel: Self::Channel,
         alfi: AddressAndLengthFormatIdentifier,
         mem_addr: u128,
         mem_size: u128,
@@ -176,21 +141,18 @@ pub trait Client {
     /** Stored data transmission functional unit - **/
     async fn clear_dtc_info(
         &mut self,
-        channel: Self::Channel,
         group: utils::U24,
         #[cfg(any(feature = "std2020"))] mem_sel: Option<u8>,
         addr_type: AddressType,
     ) -> CanResult<(), Self::Error>;
     async fn read_dtc_info(
         &mut self,
-        channel: Self::Channel,
         r#type: DTCReportType,
         data: request::DTCInfo,
     ) -> CanResult<response::DTCInfo, Self::Error>;
     /** - InputOutput control functional unit - **/
     async fn io_control(
         &mut self,
-        channel: Self::Channel,
         did: DataIdentifier,
         param: IOCtrlParameter,
         state: Vec<u8>,
@@ -199,7 +161,6 @@ pub trait Client {
     /** - Remote activation of routine functional unit - **/
     async fn routine_control(
         &mut self,
-        channel: Self::Channel,
         r#type: RoutineCtrlType,
         routine_id: u16,
         option_record: Vec<u8>,
@@ -207,7 +168,6 @@ pub trait Client {
     /** - Upload download functional unit - **/
     async fn request_download(
         &mut self,
-        channel: Self::Channel,
         alfi: AddressAndLengthFormatIdentifier,
         mem_addr: u128,
         mem_size: u128,
@@ -215,7 +175,6 @@ pub trait Client {
     ) -> CanResult<response::RequestDownload, Self::Error>;
     async fn request_upload(
         &mut self,
-        channel: Self::Channel,
         alfi: AddressAndLengthFormatIdentifier,
         mem_addr: u128,
         mem_size: u128,
@@ -223,19 +182,16 @@ pub trait Client {
     ) -> CanResult<response::RequestUpload, Self::Error>;
     async fn transfer_data(
         &mut self,
-        channel: Self::Channel,
         sequence: u8,
         data: Vec<u8>,
     ) -> CanResult<response::TransferData, Self::Error>;
     async fn request_transfer_exit(
         &mut self,
-        channel: Self::Channel,
         parameter: Vec<u8>,
     ) -> CanResult<Vec<u8>, Self::Error>;
     #[cfg(any(feature = "std2013", feature = "std2020"))]
     async fn request_file_transfer(
         &mut self,
-        channel: Self::Channel,
         operation: ModeOfOperation,
         data: request::RequestFileTransfer,
     ) -> CanResult<response::RequestFileTransfer, Self::Error>;
