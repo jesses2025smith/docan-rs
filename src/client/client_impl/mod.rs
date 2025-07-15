@@ -50,7 +50,7 @@ where
         p2_offset: Option<u16>,
     ) -> Self {
         Self {
-            isotp: CanIsoTp::new(device, channel, addr).await,
+            isotp: CanIsoTp::new(device, channel, addr, false).await,
             context: Context::new(p2_offset, byte_order),
         }
     }

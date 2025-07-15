@@ -4,6 +4,7 @@ use iso15765_2::{Address, AddressType, IsoTp};
 use rs_can::{CanDevice, DeviceBuilder};
 use rsutil::types::ByteOrder;
 use socketcan_rs::SocketCan;
+use std::sync::Arc;
 use tokio_stream::StreamExt;
 
 #[tokio::main]
@@ -26,11 +27,25 @@ async fn main() -> anyhow::Result<()> {
 
     let isotp = client.iso_tp().clone();
     // create task to process non-uds frame
-    tokio::task::spawn(async move {
+    let handle = tokio::task::spawn(async move {
         let mut stream = isotp.frame_stream().await.unwrap();
         while let Some(frame) = stream.next().await {
             println!("{}", frame)
         }
+    });
+    let handle = Arc::new(handle);
+
+    let mut tp_layer = client.iso_tp().clone();
+    let mut device_clone = device.clone();
+    let handle_weak = Arc::downgrade(&handle);
+    let _guard = scopeguard::guard((), |_| {
+        futures::executor::block_on(async {
+            tp_layer.stop().await;
+            device_clone.shutdown();
+            if let Some(handle) = handle_weak.upgrade() {
+                handle.abort();
+            }
+        });
     });
 
     client
@@ -41,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     client.iso_tp().stop().await;
-
+    handle.abort();
     device.shutdown();
 
     Ok(())

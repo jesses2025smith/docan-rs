@@ -14,7 +14,7 @@ keywords = [
 ]
 
 [features]
-default = ["std2020", "client"]
+default = ["std2020", "client", "server"]
 
 client = ["iso15765-2/can", "iso15765-2/std2004"]
 server = ["iso15765-2/can", "iso15765-2/std2004"]
@@ -39,18 +39,20 @@ tokio = { version = "1", features = ["time"] }
 version = "0.3.0-b0"
 
 [dependencies.iso14229-1]
-#path = "../iso-std-rs/iso14229-1"
+path = "../iso-std-rs/iso14229-1"
 version = "0.1.0-b1"
 default-features = false
 optional = true
 
 [dependencies.iso15765-2 ]
-#path = "../iso-std-rs/iso15765-2"
+path = "../iso-std-rs/iso15765-2"
 version = "0.1.0-b1"
 default-features = false
 
 [dev-dependencies]
 anyhow = "1"
+futures = "0.3"
+scopeguard = "1.2"
 socketcan-rs = { version = "0.3.0-b0" }
-tokio = { version = "1.40.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.40.0", features = ["macros", "rt-multi-thread", "signal"] }
 tokio-stream = "0.1"
