@@ -47,9 +47,10 @@ jobs:
         run: |
           set -e
 
-          echo "Checking $CRATE version..."
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r \
-            ".packages[] | select(.name==\"$CRATE\") | .version")
+          INFO=$(cargo metadata --no-deps --format-version 1 | jq -r \
+            ".packages[] | {name: .name, version: .version}")
+          CRATE=$(echo ${INFO} | jq -r ".name")
+          $VERSION=$(echo ${INFO} | jq -r ".version")
           echo "Detected $CRATE version: $VERSION"
           EXISTS=$(curl -s https://crates.io/api/v1/crates/${CRATE} | jq -r \
             ".versions[] | select(.num==\"$VERSION\") | .num" || true)
