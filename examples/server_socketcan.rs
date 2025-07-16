@@ -1,4 +1,5 @@
 use docan_rs::{DoCanServer, Server};
+use iso14229_1::DataIdentifier;
 use iso15765_2::Address;
 use rs_can::{CanDevice, DeviceBuilder};
 use rsutil::types::ByteOrder;
@@ -24,16 +25,17 @@ async fn main() -> anyhow::Result<()> {
     )
     .await;
 
+    server.add_data_identifier(DataIdentifier::VIN, 17).await;
     server.service_forever(100).await;
 
     match ctrl_c().await {
         Ok(()) => {
-            println!("\n收到 Ctrl+C 信号，程序退出");
+            println!("\nCtrl+C Signal, exiting...");
             server.service_stop().await;
             device.shutdown();
         }
         Err(err) => {
-            eprintln!("监听 Ctrl+C 信号出错: {:?}", err);
+            eprintln!("Ctrl+C error: {:?}", err);
         }
     }
 

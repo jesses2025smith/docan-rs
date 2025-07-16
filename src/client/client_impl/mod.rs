@@ -56,7 +56,7 @@ where
     }
 
     #[inline(always)]
-    pub fn iso_tp(&mut self) -> &mut CanIsoTp<D, C, F> {
+    pub fn tp_layer(&mut self) -> &mut CanIsoTp<D, C, F> {
         &mut self.isotp
     }
 

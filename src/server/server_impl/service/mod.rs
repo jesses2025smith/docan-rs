@@ -40,26 +40,30 @@ mod request_transfer_exit; // 0x37
 mod request_upload; // 0x35
 mod transfer_data; // 0x36 // 0x38
 
-use crate::server::DoCanServer;
-use iso14229_1::Iso14229Error;
-
-impl<D, C, F> DoCanServer<D, C, F> {
-    pub(crate) fn service_not_support(&self) {}
-
-    pub(crate) async fn error_handler(&self, err: Iso14229Error) {
-
-        // match err {
-        //     Iso14229Error::InvalidParam(_) => {}
-        //     Iso14229Error::InvalidData(_) => {}
-        //     Iso14229Error::InvalidDataLength { .. } => {}
-        //     Iso14229Error::DidNotSupported(_) => {}
-        //     Iso14229Error::InvalidDynamicallyDefinedDID(_) => {}
-        //     Iso14229Error::InvalidSessionData(_) => {}
-        //     Iso14229Error::ReservedError(_) => {}
-        //     Iso14229Error::SubFunctionError(_) => {}
-        //     Iso14229Error::ServiceError(_) => {}
-        //     Iso14229Error::OtherError(_) => {}
-        //     Iso14229Error::NotImplement => {}
-        // }
-    }
-}
+// use crate::server::DoCanServer;
+// use iso14229_1::{response::{Code, Response}, Iso14229Error, Service};
+//
+// impl<D, C, F> DoCanServer<D, C, F> {
+//     pub(crate) async fn service_not_support(&self) {
+//
+//     }
+//
+//     pub(crate) async fn error_handler(&self, service: Service, err: Iso14229Error) {
+//         rsutil::warn!("DoCanServer - Iso14229Error: {:?}", err);
+//         let resp = Response::new_negative(service, Code::GeneralReject);
+//
+//         // match err {
+//         //     Iso14229Error::InvalidParam(_) => {}
+//         //     Iso14229Error::InvalidData(_) => {}
+//         //     Iso14229Error::InvalidDataLength { .. } => {}
+//         //     Iso14229Error::DidNotSupported(_) => {}
+//         //     Iso14229Error::InvalidDynamicallyDefinedDID(_) => {}
+//         //     Iso14229Error::InvalidSessionData(_) => {}
+//         //     Iso14229Error::ReservedError(_) => {}
+//         //     Iso14229Error::SubFunctionError(_) => {}
+//         //     Iso14229Error::ServiceError(_) => {}
+//         //     Iso14229Error::OtherError(_) => {}
+//         //     Iso14229Error::NotImplement => {}
+//         // }
+//     }
+// }
