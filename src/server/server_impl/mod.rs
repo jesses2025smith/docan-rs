@@ -1,7 +1,8 @@
 mod service;
 
 use crate::{
-    server::{context, tasks::session::SessionManager, util},
+    constants::LOG_TAG_SERVER,
+    server::{context, session::SessionManager, util},
     SecurityAlgo, Server,
 };
 use iso14229_1::{
@@ -48,13 +49,13 @@ where
             let timing = self.context.get_timing().await;
             let cfg = self.context.get_did_config().await;
             if let Ok(data) = self.isotp.wait_data(timing.p2_ms()).await {
-                // rsutil::info!("DoCanServer - Received data: {}", hex::encode(&data));
+                // rsutil::info!("{} Received data: {}", LOG_TAG_SERVER, hex::encode(&data));
                 match data.len() {
                     0 => {}
                     _ => match Service::try_from(data[0]) {
                         Ok(service) => match Request::try_from((service, &data[1..], &cfg)) {
                             Ok(req) => {
-                                let data = match service {
+                                if let Err(e) = match service {
                                     Service::SessionCtrl => {
                                         self.session_ctrl(req, &cfg, timing.into()).await
                                     }
@@ -118,16 +119,25 @@ where
                                     }
                                     Service::LinkCtrl => self.link_ctrl(req, &cfg).await,
                                     Service::NRC => {
-                                        let data = util::service_not_support(Service::NRC.into());
-                                        Response::try_from((data, &cfg))
+                                        self.negative_service(&cfg).await
+                                        // let data = util::service_not_support(Service::NRC.into());
+                                        // let resp = Response::try_from((data, &cfg))?;
+                                        // self.transmit_response(resp).await;
+                                        //
+                                        // Ok(())
                                     }
-                                };
-
-                                self.process_response(service, data, &cfg).await;
+                                } {
+                                    self.transmit_response(Response::new_negative(
+                                        service,
+                                        Code::GeneralReject,
+                                    ))
+                                    .await;
+                                }
                             }
                             Err(e) => {
                                 rsutil::warn!(
-                                    "DoCanServer - error: {} when data: {} to request",
+                                    "{} error: {} when data: {} to request",
+                                    LOG_TAG_SERVER,
                                     e,
                                     hex::encode(&data)
                                 );
@@ -148,11 +158,18 @@ where
                     },
                 }
 
-                match Request::try_from((data, &cfg)) {
+                match Request::try_from((&data, &cfg)) {
                     Ok(req) => {
                         let service = req.service();
                     }
-                    Err(err) => {}
+                    Err(e) => {
+                        rsutil::error!(
+                            "{} can't new request from data: {}, because of: {}",
+                            LOG_TAG_SERVER,
+                            hex::encode(&data),
+                            e
+                        );
+                    }
                 }
             }
         }
@@ -178,11 +195,19 @@ where
         self.transmit_response(resp).await;
     }
 
+    async fn negative_service(&self, cfg: &DidConfig) -> Result<(), Iso14229Error> {
+        let data = util::service_not_support(Service::NRC.into());
+        let resp = Response::try_from((data, cfg))?;
+        self.transmit_response(resp).await;
+
+        Ok(())
+    }
+
     #[inline(always)]
-    async fn transmit_response(&self, resp: Response) {
+    pub(crate) async fn transmit_response(&self, resp: Response) {
         let data: Vec<_> = resp.into();
         if let Err(e) = self.isotp.transmit(AddressType::Physical, data).await {
-            rsutil::warn!("DoCanServer - transmit error: {:?}", e);
+            rsutil::warn!("{} transmit error: {:?}", LOG_TAG_SERVER, e);
         }
     }
 }
@@ -229,6 +254,6 @@ where
         for handle in &self.handles {
             handle.abort();
         }
-        rsutil::info!("DoCanServer - stopped");
+        rsutil::info!("{} stopped", LOG_TAG_SERVER);
     }
 }

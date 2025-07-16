@@ -47,9 +47,17 @@ async fn main() -> anyhow::Result<()> {
     client
         .session_ctrl(SessionType::Extended, false, AddressType::Functional)
         .await?;
+    let vin = "ABCDEF1234567890I".as_bytes();
     client
-        .write_data_by_identifier(DataIdentifier::VIN, "ABCDEF1234567890I".as_bytes().to_vec())
+        .write_data_by_identifier(DataIdentifier::VIN, vin.to_vec())
         .await?;
+
+    let data = client
+        .read_data_by_identifier(DataIdentifier::VIN, vec![])
+        .await?
+        .data;
+    assert_eq!(data.did, DataIdentifier::VIN);
+    assert_eq!(data.data, vin);
 
     Ok(())
 }

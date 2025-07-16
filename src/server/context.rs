@@ -10,8 +10,8 @@ pub(crate) struct Context {
     pub(crate) timing: Arc<Mutex<SessionTiming>>,
     pub(crate) did_cfg: Arc<Mutex<DidConfig>>,
     /// static did
-    pub(crate) did_st: Arc<Mutex<HashMap<DataIdentifier, BytesMut>>>,
-    pub(crate) did_dny: Arc<Mutex<HashMap<DataIdentifier, BytesMut>>>,
+    pub(crate) did_st: Arc<Mutex<HashMap<DataIdentifier, Bytes>>>,
+    pub(crate) did_dny: Arc<Mutex<HashMap<DataIdentifier, Bytes>>>,
     pub(crate) security_algo: Arc<Mutex<Option<SecurityAlgo>>>,
     pub(crate) byte_order: ByteOrder,
 }
@@ -57,27 +57,40 @@ impl Context {
     pub async fn get_static_did(&self, did: &DataIdentifier) -> Option<Bytes> {
         let guard = self.did_st.lock().await;
         match guard.get(did) {
-            Some(data) => Some(data.clone().freeze()),
+            Some(data) => Some(data.clone()),
             None => {
                 drop(guard);
                 match self.did_cfg.lock().await.get(did) {
-                    Some(&len) => Some(BytesMut::with_capacity(len).freeze()),
+                    Some(&len) => {
+                        let mut data = Vec::with_capacity(len);
+                        data.resize(len, 0);
+                        Some(Bytes::from(data))
+                    }
                     None => None,
                 }
             }
         }
     }
 
-    pub async fn set_static_did(&mut self, did: &DataIdentifier, data: &[u8]) -> bool {
+    pub async fn set_static_did<T: AsRef<[u8]>>(&mut self, did: &DataIdentifier, data: T) -> bool {
         match self.did_cfg.lock().await.get(did) {
             Some(&len) => {
+                let data = data.as_ref();
                 if len != data.len() {
                     false
                 } else {
+                    self.did_st
+                        .lock()
+                        .await
+                        .insert(*did, BytesMut::from(data).freeze());
                     true
                 }
             }
             None => false,
         }
+    }
+
+    pub(crate) async fn clear_diagnostic_info(&self) {
+
     }
 }

@@ -1,6 +1,6 @@
 mod trait_impl;
 
-use crate::{client::context::Context, error::DoCanError};
+use crate::{client::context::Context, constants::LOG_TAG_CLIENT, error::DoCanError};
 use iso14229_1::{
     request::Request,
     response::{Code, Response},
@@ -135,7 +135,8 @@ where
         let mut response = Response::try_from((data, cfg)).map_err(DoCanError::ISO14229Error)?;
         while Self::response_service_check(&response, service)? {
             rsutil::debug!(
-                "DoCANClient - tester present when {:?}",
+                "{} tester present when {:?}",
+                LOG_TAG_CLIENT,
                 Code::RequestCorrectlyReceivedResponsePending
             );
             let (_, request) =

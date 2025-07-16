@@ -1,36 +1,47 @@
 //! request of Service 2E
 
-use crate::server::DoCanServer;
+use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
 use iso14229_1::{
-    request::Request,
+    request::{Request, WriteDID},
     response::{Code, Response},
-    DataIdentifier, DidConfig, Iso14229Error, Service,
+    DidConfig, Iso14229Error, SessionType,
 };
+use rs_can::{CanDevice, CanFrame};
+use std::fmt::Display;
 
-impl<D, C, F> DoCanServer<D, C, F> {
+impl<D, C, F> DoCanServer<D, C, F>
+where
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
+    C: Clone + Eq + Display + Send + Sync + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+{
     pub(crate) async fn write_did(
         &mut self,
         req: Request,
         cfg: &DidConfig,
-    ) -> Result<Response, Iso14229Error> {
-        let data = req.raw_data();
-        let data_len = data.len();
-        match data_len {
-            0..=2 => Err(Iso14229Error::InvalidDataLength {
-                expect: 3,
-                actual: data_len,
-            }),
-            _ => {
-                let did = DataIdentifier::from(u16::from_be_bytes([data[0], data[1]]));
-                if self.context.set_static_did(&did, &data[2..]).await {
-                    Response::try_from((Service::WriteDID, &data[..2], cfg))
-                } else {
-                    Ok(Response::new_negative(
-                        Service::WriteDID,
-                        Code::GeneralReject,
-                    ))
+    ) -> Result<(), Iso14229Error> {
+        let service = req.service();
+        let resp = match self.session.session_type().await {
+            SessionType::Extended => match req.data::<WriteDID>(cfg) {
+                Ok(ctx) => {
+                    let did = ctx.0.did;
+                    if self.context.set_static_did(&did, ctx.0.data).await {
+                        let data: u16 = did.into();
+                        Response::try_from((service, data.to_be_bytes(), cfg))?
+                    } else {
+                        Response::new_negative(service, Code::GeneralReject)
+                    }
                 }
-            }
-        }
+                Err(e) => {
+                    rsutil::warn!("{} can't parse did context from data", LOG_TAG_SERVER);
+                    Response::new_negative(service, Code::GeneralReject)
+                }
+            },
+            _ => Response::new_negative(service, Code::SubFunctionNotSupportedInActiveSession),
+        };
+
+        self.transmit_response(resp).await;
+
+        Ok(())
     }
 }
