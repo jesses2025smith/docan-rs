@@ -1,10 +1,10 @@
 [package]
 name = "docan"
-version = "0.1.0-b1"
+version = "0.1.0-b2"
 edition = "2021"
 license = "MIT OR GPL-3.0"
 authors = ["Jesse Smith <jesses2025smith@gmail.com>"]
-description = "A DoCAN protocol."
+description = "DoCAN client and server implement."
 homepage = "https://github.com/jesses2025smith/docan-rs"
 repository = "https://github.com/jesses2025smith/docan-rs"
 keywords = [
