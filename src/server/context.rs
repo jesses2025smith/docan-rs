@@ -2,7 +2,10 @@ use crate::{server::session::SessionManager, Config, DoCanError, SecurityAlgo};
 use bytes::{Bytes, BytesMut};
 use iso14229_1::{response::SessionTiming, DataIdentifier, DidConfig};
 use std::{collections::HashMap, sync::Arc};
-use tokio::{fs::read, sync::{Mutex, MutexGuard}};
+use tokio::{
+    fs::read,
+    sync::{Mutex, MutexGuard},
+};
 
 #[derive(Clone)]
 pub(crate) struct Context {

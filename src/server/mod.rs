@@ -6,8 +6,8 @@ mod util;
 pub use server_impl::*;
 
 use crate::SecurityAlgo;
-use iso14229_1::{response::SessionTiming, DidConfig, utils::did_config_deserialize};
-use iso15765_2::Address;
+use iso14229_1::{response::SessionTiming, utils::did_config_deserialize, DidConfig};
+use iso15765_2::can::Address;
 use rsutil::types::ByteOrder;
 use serde::Deserialize;
 

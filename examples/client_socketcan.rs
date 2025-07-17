@@ -1,6 +1,9 @@
 use docan_rs::{Client, DoCanClient};
 use iso14229_1::{DataIdentifier, SessionType};
-use iso15765_2::{Address, AddressType, IsoTp};
+use iso15765_2::{
+    can::{Address, AddressType},
+    IsoTp,
+};
 use rs_can::{CanDevice, DeviceBuilder};
 use rsutil::types::ByteOrder;
 use socketcan_rs::SocketCan;

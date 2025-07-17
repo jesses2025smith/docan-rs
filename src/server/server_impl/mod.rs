@@ -10,7 +10,10 @@ use iso14229_1::{
     response::{Code, Response},
     Iso14229Error, Service,
 };
-use iso15765_2::{Address, AddressType, CanIsoTp, IsoTp, IsoTpError};
+use iso15765_2::{
+    can::{Address, AddressType, CanIsoTp},
+    IsoTp, IsoTpError,
+};
 use rs_can::{CanDevice, CanFrame};
 use std::{fmt::Display, sync::Arc};
 use tokio::{spawn, task::JoinHandle};

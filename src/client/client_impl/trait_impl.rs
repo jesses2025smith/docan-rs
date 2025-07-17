@@ -9,7 +9,7 @@ use iso14229_1::{
     utils::U24,
     *,
 };
-use iso15765_2::{Address, AddressType};
+use iso15765_2::can::{Address, AddressType};
 use rs_can::{CanDevice, CanFrame, CanResult};
 use std::{fmt::Display, hash::Hash, time::Duration};
 use tokio::time::sleep;

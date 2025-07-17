@@ -6,7 +6,10 @@ use iso14229_1::{
     response::{Code, Response},
     DidConfig, Service, TesterPresentType, SUPPRESS_POSITIVE,
 };
-use iso15765_2::{Address, AddressType, CanIsoTp, IsoTp, IsoTpError};
+use iso15765_2::{
+    can::{Address, AddressType, CanIsoTp},
+    IsoTp, IsoTpError,
+};
 use rs_can::{CanDevice, CanFrame};
 use rsutil::types::ByteOrder;
 use std::{fmt::Display, hash::Hash};

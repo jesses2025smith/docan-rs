@@ -25,11 +25,7 @@ async fn main() -> anyhow::Result<()> {
     builder.add_config(iface.clone(), Default::default());
 
     let mut device = builder.build::<SocketCan>()?;
-    let mut server = DoCanServer::new(
-        device.clone(),
-        iface.clone(),
-    )
-    .await?;
+    let mut server = DoCanServer::new(device.clone(), iface.clone()).await?;
 
     server.service_forever(100).await;
 
@@ -52,7 +48,10 @@ async fn main() -> anyhow::Result<()> {
 ```rust
 use docan_rs::{Client, DoCanClient};
 use iso14229_1::{DataIdentifier, SessionType};
-use iso15765_2::{Address, AddressType, IsoTp};
+use iso15765_2::{
+    can::{Address, AddressType},
+    IsoTp,
+};
 use rs_can::{CanDevice, DeviceBuilder};
 use rsutil::types::ByteOrder;
 use socketcan_rs::SocketCan;
@@ -105,7 +104,7 @@ async fn main() -> anyhow::Result<()> {
         .await?
         .data;
     assert_eq!(data.did, DataIdentifier::VIN);
-    assert_eq!(data.data, vin);
+    assert_eq!(data.data, "ABCDEF1234567890I");
 
     Ok(())
 }

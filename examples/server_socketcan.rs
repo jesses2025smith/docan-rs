@@ -10,11 +10,7 @@ async fn main() -> anyhow::Result<()> {
     builder.add_config(iface.clone(), Default::default());
 
     let mut device = builder.build::<SocketCan>()?;
-    let mut server = DoCanServer::new(
-        device.clone(),
-        iface.clone(),
-    )
-    .await?;
+    let mut server = DoCanServer::new(device.clone(), iface.clone()).await?;
 
     server.service_forever(100).await;
 
