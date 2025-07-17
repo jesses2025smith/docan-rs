@@ -2,15 +2,15 @@ mod service;
 
 use crate::{
     constants::LOG_TAG_SERVER,
-    server::{context, session::SessionManager, util},
+    server::{context, session::SessionManager},
     SecurityAlgo, Server,
 };
 use iso14229_1::{
     request::Request,
     response::{Code, Response},
-    DataIdentifier, DidConfig, Iso14229Error, Service,
+    DataIdentifier, Iso14229Error, Service,
 };
-use iso15765_2::{Address, AddressType, CanIsoTp, IsoTp};
+use iso15765_2::{Address, AddressType, CanIsoTp, IsoTp, IsoTpError};
 use rs_can::{CanDevice, CanFrame};
 use rsutil::types::ByteOrder;
 use std::{fmt::Display, sync::Arc};
@@ -44,7 +44,7 @@ where
         self.isotp.clone()
     }
 
-    pub(crate) async fn server(&mut self) {
+    async fn server(&mut self) {
         loop {
             let timing = self.context.get_timing().await;
             let cfg = self.context.get_did_config().await;
@@ -119,19 +119,15 @@ where
                                     }
                                     Service::LinkCtrl => self.link_ctrl(req, &cfg).await,
                                     Service::NRC => {
-                                        self.negative_service(&cfg).await
-                                        // let data = util::service_not_support(Service::NRC.into());
-                                        // let resp = Response::try_from((data, &cfg))?;
-                                        // self.transmit_response(resp).await;
-                                        //
-                                        // Ok(())
+                                        self.negative_service(
+                                            Service::NRC.into(),
+                                            Code::ServiceNotSupported,
+                                        )
+                                        .await;
+                                        Ok(())
                                     }
                                 } {
-                                    self.transmit_response(Response::new_negative(
-                                        service,
-                                        Code::GeneralReject,
-                                    ))
-                                    .await;
+                                    self.process_uds_error(service, e).await;
                                 }
                             }
                             Err(e) => {
@@ -141,73 +137,80 @@ where
                                     e,
                                     hex::encode(&data)
                                 );
-                                self.transmit_response(Response::new_negative(
-                                    service,
-                                    Code::GeneralReject,
-                                ))
-                                .await;
+                                self.process_uds_error(service, e).await;
                             }
                         },
                         Err(_) => {
-                            if let Ok(resp) =
-                                Response::try_from((util::service_not_support(data[0]), &cfg))
-                            {
-                                self.transmit_response(resp).await;
-                            }
+                            // can't parse service
+                            self.negative_service(data[0], Code::ServiceNotSupported)
+                                .await
                         }
                     },
-                }
-
-                match Request::try_from((&data, &cfg)) {
-                    Ok(req) => {
-                        let service = req.service();
-                    }
-                    Err(e) => {
-                        rsutil::error!(
-                            "{} can't new request from data: {}, because of: {}",
-                            LOG_TAG_SERVER,
-                            hex::encode(&data),
-                            e
-                        );
-                    }
                 }
             }
         }
     }
 
-    async fn process_response(
-        &self,
-        service: Service,
-        data: Result<Response, Iso14229Error>,
-        cfg: &DidConfig,
-    ) {
-        let resp = match data {
-            Ok(resp) => resp,
-            Err(_) => {
-                let data = vec![
-                    Service::NRC.into(),
-                    service.into(),
-                    Code::GeneralReject.into(),
-                ];
-                Response::try_from((data, cfg)).unwrap()
-            }
-        };
-        self.transmit_response(resp).await;
+    async fn negative_service(&self, service: u8, code: Code) {
+        let data = vec![Service::NRC.into(), service, code.into()];
+        if let Err(e) = self.isotp.transmit(AddressType::Physical, data).await {
+            rsutil::error!(
+                "{} can't transmit negative response, because of: {}",
+                LOG_TAG_SERVER,
+                e
+            );
+        }
     }
 
-    async fn negative_service(&self, cfg: &DidConfig) -> Result<(), Iso14229Error> {
-        let data = util::service_not_support(Service::NRC.into());
-        let resp = Response::try_from((data, cfg))?;
-        self.transmit_response(resp).await;
-
-        Ok(())
+    async fn process_uds_error(&self, service: Service, e: Iso14229Error) {
+        let code = match e {
+            // Iso14229Error::InvalidParam(_) => {}
+            // Iso14229Error::InvalidData(_) => {}
+            Iso14229Error::InvalidDataLength { .. } => Code::IncorrectMessageLengthOrInvalidFormat,
+            // Iso14229Error::DidNotSupported(_) => {}
+            // Iso14229Error::InvalidDynamicallyDefinedDID(_) => {}
+            // Iso14229Error::InvalidSessionData(_) => {}
+            // Iso14229Error::ReservedError(_) => {}
+            // Iso14229Error::SubFunctionError(_) => {}
+            Iso14229Error::ServiceError(_) => Code::ConditionsNotCorrect,
+            // Iso14229Error::OtherError(_) => {}
+            // Iso14229Error::NotImplement => {}
+            _ => Code::GeneralReject, // TODO
+        };
+        self.transmit_response(Response::new_negative(service, code), true)
+            .await;
     }
 
     #[inline(always)]
-    pub(crate) async fn transmit_response(&self, resp: Response) {
+    pub(crate) async fn transmit_response(&self, resp: Response, flag: bool) {
+        let service = resp.service();
         let data: Vec<_> = resp.into();
         if let Err(e) = self.isotp.transmit(AddressType::Physical, data).await {
             rsutil::warn!("{} transmit error: {:?}", LOG_TAG_SERVER, e);
+            if !flag {
+                // resend negative response is no-need
+                return;
+            }
+
+            if let Some(code) = match e {
+                // IsoTpError::DeviceError => {}
+                IsoTpError::EmptyPdu => Some(Code::IncorrectMessageLengthOrInvalidFormat),
+                IsoTpError::InvalidPdu(_) => Some(Code::GeneralReject),
+                IsoTpError::InvalidParam(_) => Some(Code::GeneralReject),
+                IsoTpError::InvalidDataLength { .. } => {
+                    Some(Code::IncorrectMessageLengthOrInvalidFormat)
+                }
+                IsoTpError::LengthOutOfRange(_) => Some(Code::RequestOutOfRange),
+                IsoTpError::InvalidStMin(_) => Some(Code::GeneralReject),
+                IsoTpError::InvalidSequence { .. } => Some(Code::WrongBlockSequenceCounter),
+                IsoTpError::MixFramesError => Some(Code::GeneralReject),
+                IsoTpError::Timeout { .. } => Some(Code::GeneralReject),
+                IsoTpError::OverloadFlow => Some(Code::RequestOutOfRange),
+                _ => None,
+            } {
+                let resp = Response::new_negative(service, code);
+                self.transmit_response(resp, false).await;
+            }
         }
     }
 }

@@ -1,6 +1,9 @@
-//! request of Service 11
+//! response of Service 11
 
-use crate::server::{util, DoCanServer};
+use crate::{
+    constants::LOG_TAG_SERVER,
+    server::{util, DoCanServer},
+};
 use iso14229_1::{request::Request, response::Response, DidConfig, ECUResetType, Iso14229Error};
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
@@ -14,36 +17,43 @@ where
     pub(crate) async fn ecu_reset(
         &self,
         req: Request,
-        cfg: &DidConfig,
+        _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
         let data = match req.sub_function() {
-            Some(sub_func) => {
-                if sub_func.is_suppress_positive() {
+            Some(sf) => {
+                if sf.is_suppress_positive() {
                     None // suppress positive
                 } else {
-                    match sub_func.function::<ECUResetType>() {
-                        Ok(sub_func) => {
-                            let data = match sub_func {
+                    match sf.function::<ECUResetType>() {
+                        Ok(r#type) => {
+                            let data = match r#type {
                                 ECUResetType::EnableRapidPowerShutDown => vec![1],
                                 _ => vec![],
                             };
                             Some(util::positive_response(
                                 service,
-                                Some(sub_func.into()),
+                                Some(r#type.into()),
                                 data,
-                                cfg,
+                                _cfg,
                             ))
                         }
-                        Err(_) => Some(util::sub_func_not_support(service)),
+                        Err(e) => {
+                            rsutil::warn!(
+                                "{} Failed to parse sub-function: {:?}",
+                                LOG_TAG_SERVER,
+                                e
+                            );
+                            Some(util::sub_func_not_support(service))
+                        }
                     }
                 }
             }
-            None => Some(util::sub_func_not_support(service)),
+            None => Some(util::invalid_format(service)),
         };
 
         if let Some(data) = data {
-            self.transmit_response(Response::try_from((&data, cfg))?)
+            self.transmit_response(Response::try_from((&data, _cfg))?, true)
                 .await;
         }
 

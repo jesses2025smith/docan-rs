@@ -50,7 +50,7 @@ where
         }
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new(service, Some(sub_func), vec![], &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let timing = match self
             .suppress_positive_sr(addr_type, request, suppress_positive, &cfg)
@@ -61,7 +61,7 @@ where
 
                 Some(
                     resp.data::<response::SessionCtrl>(&cfg)
-                        .map_err(DoCanError::ISO14229Error)?
+                        .map_err(DoCanError::Iso14229Error)?
                         .0,
                 )
             }
@@ -88,7 +88,7 @@ where
         }
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new(service, Some(sub_func), vec![], &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         if let Some(response) = self
             .suppress_positive_sr(addr_type, request, suppress_positive, &cfg)
@@ -98,7 +98,7 @@ where
 
             let resp = response
                 .data::<response::ECUReset>(&cfg)
-                .map_err(DoCanError::ISO14229Error)?;
+                .map_err(DoCanError::Iso14229Error)?;
             if let Some(seconds) = resp.second {
                 sleep(Duration::from_secs(seconds as u64)).await;
             }
@@ -115,7 +115,7 @@ where
         let service = Service::SecurityAccess;
         let cfg = self.context.get_did_cfg().await;
         let request =
-            Request::new(service, Some(level), params, &cfg).map_err(DoCanError::ISO14229Error)?;
+            Request::new(service, Some(level), params, &cfg).map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -135,7 +135,7 @@ where
         let service = Service::SecurityAccess;
         let cfg = self.context.get_did_cfg().await;
         let req =
-            Request::new(service, Some(level), params, &cfg).map_err(DoCanError::ISO14229Error)?;
+            Request::new(service, Some(level), params, &cfg).map_err(DoCanError::Iso14229Error)?;
 
         let resp = self
             .send_and_response(AddressType::Physical, req, &cfg)
@@ -148,10 +148,10 @@ where
             .get_security_algo()
             .await
             .ok_or_else(|| DoCanError::OtherError("security algorithm required".into()))?;
-        match algo(level, seed, salt)? {
+        match algo(level, &seed, &salt)? {
             Some(data) => {
                 let request = Request::new(service, Some(level + 1), data, &cfg)
-                    .map_err(DoCanError::ISO14229Error)?;
+                    .map_err(DoCanError::Iso14229Error)?;
                 let response = self
                     .send_and_response(AddressType::Physical, request, &cfg)
                     .await?;
@@ -176,10 +176,10 @@ where
             sub_func |= SUPPRESS_POSITIVE;
         }
         let data = request::CommunicationCtrl::new(ctrl_type, comm_type, node_id)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
         let cfg = self.context.get_did_cfg().await;
         let req = Request::new::<Vec<_>>(service, Some(sub_func), data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let resp = self
             .suppress_positive_sr(addr_type, req, suppress_positive, &cfg)
@@ -201,7 +201,7 @@ where
         let service = Service::Authentication;
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(service, Some(auth_task.into()), data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -210,7 +210,7 @@ where
 
         response
             .data::<response::Authentication>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 
     async fn tester_present(
@@ -248,7 +248,7 @@ where
         }
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new(service, Some(sub_func), parameter, &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .suppress_positive_sr(AddressType::Physical, request, suppress_positive, &cfg)
@@ -257,7 +257,7 @@ where
         match response {
             Some(v) => {
                 Self::sub_func_check(&v, r#type.into(), service)?;
-                Ok(Some(v.data(&cfg).map_err(DoCanError::ISO14229Error)?))
+                Ok(Some(v.data(&cfg).map_err(DoCanError::Iso14229Error)?))
             }
             None => Ok(None),
         }
@@ -280,10 +280,10 @@ where
             service_data,
             signature_data,
         )
-        .map_err(DoCanError::ISO14229Error)?;
+        .map_err(DoCanError::Iso14229Error)?;
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(Service::SecuredDataTrans, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -291,7 +291,7 @@ where
 
         response
             .data::<response::SecuredDataTrans>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 
     async fn control_dtc_setting(
@@ -307,7 +307,7 @@ where
         }
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new(service, Some(sub_func), parameter, &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .suppress_positive_sr(AddressType::Physical, request, suppress_positive, &cfg)
@@ -337,7 +337,7 @@ where
         }
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(service, Some(sub_func), data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .suppress_positive_sr(AddressType::Physical, request, suppress_positive, &cfg)
@@ -358,7 +358,7 @@ where
         let data = request::ReadDID::new(did, others);
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(Service::ReadDID, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -366,7 +366,7 @@ where
 
         response
             .data::<response::ReadDID>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 
     async fn read_memory_by_address(
@@ -376,7 +376,7 @@ where
         let data = request::ReadMemByAddr(mem_loc);
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(Service::ReadMemByAddr, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -392,7 +392,7 @@ where
         let data = request::ReadScalingDID(did);
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(Service::ReadScalingDID, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -400,7 +400,7 @@ where
 
         response
             .data::<response::ReadScalingDID>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 
     async fn read_data_by_period_identifier(
@@ -409,10 +409,10 @@ where
         did: Vec<u8>,
     ) -> CanResult<response::ReadDataByPeriodId, DoCanError> {
         let data =
-            request::ReadDataByPeriodId::new(mode, did).map_err(DoCanError::ISO14229Error)?;
+            request::ReadDataByPeriodId::new(mode, did).map_err(DoCanError::Iso14229Error)?;
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(Service::ReadDataByPeriodId, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -420,7 +420,7 @@ where
 
         response
             .data::<response::ReadDataByPeriodId>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 
     async fn dynamically_define_data_by_identifier(
@@ -436,7 +436,7 @@ where
         }
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(service, Some(sub_func), data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .suppress_positive_sr(AddressType::Physical, request, suppress_positive, &cfg)
@@ -445,7 +445,7 @@ where
         match response {
             Some(v) => {
                 Self::sub_func_check(&v, r#type.into(), service)?;
-                Ok(Some(v.data(&cfg).map_err(DoCanError::ISO14229Error)?))
+                Ok(Some(v.data(&cfg).map_err(DoCanError::Iso14229Error)?))
             }
             None => Ok(None),
         }
@@ -459,7 +459,7 @@ where
         let data = request::WriteDID(DIDData { did, data });
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(Service::WriteDID, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let _ = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -476,10 +476,10 @@ where
         record: Vec<u8>,
     ) -> CanResult<response::WriteMemByAddr, DoCanError> {
         let data = request::WriteMemByAddr::new(alfi, mem_addr, mem_size, record)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(Service::WriteMemByAddr, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -487,7 +487,7 @@ where
 
         response
             .data::<response::WriteMemByAddr>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 
     async fn clear_dtc_info(
@@ -502,7 +502,7 @@ where
         let data = request::ClearDiagnosticInfo::new(group);
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(Service::ClearDiagnosticInfo, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let _ = self.send_and_response(addr_type, request, &cfg).await?;
 
@@ -517,7 +517,7 @@ where
         let service = Service::ReadDTCInfo;
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(service, Some(r#type.into()), data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -526,7 +526,7 @@ where
 
         response
             .data::<response::DTCInfo>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 
     async fn io_control(
@@ -538,9 +538,9 @@ where
     ) -> CanResult<response::IOCtrl, DoCanError> {
         let cfg = self.context.get_did_cfg().await;
         let data = request::IOCtrl::new(did, param, state, mask, &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
         let request = Request::new::<Vec<_>>(Service::IOCtrl, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -548,7 +548,7 @@ where
 
         response
             .data::<response::IOCtrl>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 
     async fn routine_control(
@@ -564,7 +564,7 @@ where
         };
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(service, Some(r#type.into()), data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -573,7 +573,7 @@ where
 
         response
             .data::<response::RoutineCtrl>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 
     async fn request_download(
@@ -586,11 +586,11 @@ where
         let data = request::RequestDownload {
             dfi: dfi.unwrap_or_default(),
             mem_loc: MemoryLocation::new(alfi, mem_addr, mem_size)
-                .map_err(DoCanError::ISO14229Error)?,
+                .map_err(DoCanError::Iso14229Error)?,
         };
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(Service::RequestDownload, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -598,7 +598,7 @@ where
 
         response
             .data::<response::RequestDownload>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 
     async fn request_upload(
@@ -611,11 +611,11 @@ where
         let data = request::RequestUpload {
             dfi: dfi.unwrap_or_default(),
             mem_loc: MemoryLocation::new(alfi, mem_addr, mem_size)
-                .map_err(DoCanError::ISO14229Error)?,
+                .map_err(DoCanError::Iso14229Error)?,
         };
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(Service::RequestDownload, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -623,7 +623,7 @@ where
 
         response
             .data::<response::RequestUpload>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 
     async fn transfer_data(
@@ -634,7 +634,7 @@ where
         let data = response::TransferData { sequence, data };
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(Service::TransferData, None, data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -642,7 +642,7 @@ where
 
         let data = response
             .data::<response::TransferData>(&cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         if data.sequence != sequence {
             return Err(DoCanError::UnexpectedTransferSequence {
@@ -660,7 +660,7 @@ where
     ) -> CanResult<Vec<u8>, DoCanError> {
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new(Service::RequestTransferExit, None, parameter, &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -679,7 +679,7 @@ where
         let sub_func = operation.into();
         let cfg = self.context.get_did_cfg().await;
         let request = Request::new::<Vec<_>>(service, Some(sub_func), data.into(), &cfg)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         let response = self
             .send_and_response(AddressType::Physical, request, &cfg)
@@ -688,6 +688,6 @@ where
 
         response
             .data::<response::RequestFileTransfer>(&cfg)
-            .map_err(DoCanError::ISO14229Error)
+            .map_err(DoCanError::Iso14229Error)
     }
 }

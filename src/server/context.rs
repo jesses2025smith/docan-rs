@@ -13,6 +13,7 @@ pub(crate) struct Context {
     pub(crate) did_st: Arc<Mutex<HashMap<DataIdentifier, Bytes>>>,
     pub(crate) did_dny: Arc<Mutex<HashMap<DataIdentifier, Bytes>>>,
     pub(crate) security_algo: Arc<Mutex<Option<SecurityAlgo>>>,
+    pub(crate) sa_ctx: Arc<Mutex<Option<(u8, Bytes)>>>,
     pub(crate) byte_order: ByteOrder,
 }
 
@@ -36,7 +37,12 @@ impl Context {
 
     #[inline(always)]
     pub(crate) async fn set_security_algo(&self, alg: SecurityAlgo) {
-        self.security_algo.lock().await.replace(alg);
+        let _ = self.security_algo.lock().await.replace(alg);
+    }
+
+    #[inline(always)]
+    pub async fn get_security_algo(&self) -> Option<SecurityAlgo> {
+        self.security_algo.lock().await.clone()
     }
 
     #[inline(always)]
@@ -90,7 +96,5 @@ impl Context {
         }
     }
 
-    pub(crate) async fn clear_diagnostic_info(&self) {
-
-    }
+    pub(crate) async fn clear_diagnostic_info(&self) {}
 }

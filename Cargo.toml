@@ -17,7 +17,7 @@ keywords = [
 default = ["std2020", "client", "server"]
 
 client = ["iso15765-2/can", "iso15765-2/std2004"]
-server = ["iso15765-2/can", "iso15765-2/std2004"]
+server = ["iso15765-2/can", "iso15765-2/std2004", "rand"]
 
 std2006 = ["iso14229-1/std2006"]
 std2013 = ["iso14229-1/std2013"]
@@ -49,6 +49,10 @@ optional = true
 path = "../iso-std-rs/iso15765-2"
 version = "0.1.0-b1"
 default-features = false
+
+[dependencies.rand]
+version = "0.9"
+optional = true
 
 [dev-dependencies]
 anyhow = "1"

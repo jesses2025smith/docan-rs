@@ -1,7 +1,10 @@
 //! request of Service 87
 
-use crate::server::{util, DoCanServer};
-use iso14229_1::{request::Request, response::Response, DidConfig, Iso14229Error};
+use crate::{
+    constants::LOG_TAG_SERVER,
+    server::{util, DoCanServer},
+};
+use iso14229_1::{request::Request, response::Response, DidConfig, Iso14229Error, LinkCtrlType};
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
 
@@ -14,8 +17,23 @@ where
     pub(crate) async fn link_ctrl(
         &self,
         req: Request,
-        cfg: &DidConfig,
+        _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
-        todo!()
+        let service = req.service();
+        let data = match req.sub_function() {
+            Some(sf) => match sf.function::<LinkCtrlType>() {
+                Ok(r#type) => util::positive_response(service, Some(r#type.into()), vec![], _cfg),
+                Err(e) => {
+                    rsutil::warn!("{} Failed to parse sub-function: {:?}", LOG_TAG_SERVER, e);
+                    util::sub_func_not_support(service)
+                }
+            },
+            None => util::sub_func_not_support(service),
+        };
+
+        self.transmit_response(Response::try_from((&data, _cfg))?, true)
+            .await;
+
+        Ok(())
     }
 }

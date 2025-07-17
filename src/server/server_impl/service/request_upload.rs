@@ -1,7 +1,14 @@
-//! request of Service 35
+//! response of Service 35
 
-use crate::server::{util, DoCanServer};
-use iso14229_1::{request::Request, response::Response, DidConfig, Iso14229Error};
+use crate::{
+    constants::LOG_TAG_SERVER,
+    server::{util, DoCanServer},
+};
+use iso14229_1::{
+    request::{self, Request},
+    response::{self, Response},
+    DidConfig, Iso14229Error,
+};
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
 
@@ -14,8 +21,20 @@ where
     pub(crate) async fn request_upload(
         &self,
         req: Request,
-        cfg: &DidConfig,
+        _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
-        todo!()
+        let service = req.service();
+        let data = match req.data::<request::RequestUpload>(_cfg) {
+            Ok(ctx) => response::RequestUpload::new(ctx.mem_loc.memory_size())?.into(),
+            Err(e) => {
+                rsutil::warn!("{} Failed to parse request data: {:?}", LOG_TAG_SERVER, e);
+                util::sub_func_not_support(service)
+            }
+        };
+
+        self.transmit_response(Response::try_from((&data, _cfg))?, true)
+            .await;
+
+        Ok(())
     }
 }

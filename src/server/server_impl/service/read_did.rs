@@ -18,10 +18,10 @@ where
     pub(crate) async fn read_did(
         &self,
         req: Request,
-        cfg: &DidConfig,
+        _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
-        let resp = match req.data::<ReadDID>(cfg) {
+        let resp = match req.data::<ReadDID>(_cfg) {
             Ok(ctx) => {
                 let list = ctx.collect();
                 if list.is_empty() {
@@ -50,17 +50,17 @@ where
                     if data.is_empty() {
                         Response::new_negative(service, Code::RequestOutOfRange)
                     } else {
-                        Response::try_from((service, data, cfg))?
+                        Response::try_from((service, data, _cfg))?
                     }
                 }
             }
-            Err(err) => {
-                rsutil::warn!("{} Failed to parse request: {:?}", LOG_TAG_SERVER, err);
+            Err(e) => {
+                rsutil::warn!("{} Failed to parse request data: {:?}", LOG_TAG_SERVER, e);
                 Response::new_negative(service, Code::GeneralReject)
             }
         };
 
-        self.transmit_response(resp).await;
+        self.transmit_response(resp, true).await;
 
         Ok(())
     }

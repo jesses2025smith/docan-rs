@@ -8,7 +8,7 @@ pub enum DoCanError {
     DeviceError(CanError),
 
     #[error("{0}")]
-    ISO14229Error(Iso14229Error),
+    Iso14229Error(Iso14229Error),
 
     #[error("DoCAN - service `{service}` got an unexpected sub-function(expect: {expect}, actual: {actual})")]
     UnexpectedSubFunction {
@@ -37,4 +37,22 @@ pub enum DoCanError {
 
     #[error("DoCAN - service: {0} is not implement")]
     NotImplement(Service),
+}
+
+impl From<CanError> for DoCanError {
+    fn from(error: CanError) -> Self {
+        DoCanError::DeviceError(error)
+    }
+}
+
+impl From<Iso14229Error> for DoCanError {
+    fn from(error: Iso14229Error) -> Self {
+        DoCanError::Iso14229Error(error)
+    }
+}
+
+impl From<IsoTpError> for DoCanError {
+    fn from(error: IsoTpError) -> Self {
+        DoCanError::IsoTpError(error)
+    }
 }

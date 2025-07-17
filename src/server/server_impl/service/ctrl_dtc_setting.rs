@@ -1,7 +1,10 @@
-//! request of Service 85
+//! response of Service 85
 
-use crate::server::{util, DoCanServer};
-use iso14229_1::{request::Request, response::Response, DidConfig, Iso14229Error};
+use crate::{
+    constants::LOG_TAG_SERVER,
+    server::{util, DoCanServer},
+};
+use iso14229_1::{request::Request, response::Response, DTCSettingType, DidConfig, Iso14229Error};
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
 
@@ -14,8 +17,40 @@ where
     pub(crate) async fn ctrl_dtc_setting(
         &self,
         req: Request,
-        cfg: &DidConfig,
+        _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
-        todo!()
+        let service = req.service();
+        let data = match req.sub_function() {
+            Some(sf) => {
+                if sf.is_suppress_positive() {
+                    None
+                } else {
+                    match sf.function::<DTCSettingType>() {
+                        Ok(r#type) => Some(util::positive_response(
+                            service,
+                            Some(r#type.into()),
+                            vec![],
+                            _cfg,
+                        )),
+                        Err(e) => {
+                            rsutil::warn!(
+                                "{} Failed to parse sub-function: {:?}",
+                                LOG_TAG_SERVER,
+                                e
+                            );
+                            Some(util::sub_func_not_support(service))
+                        }
+                    }
+                }
+            }
+            None => Some(util::invalid_format(service)),
+        };
+
+        if let Some(data) = data {
+            self.transmit_response(Response::try_from((&data, _cfg))?, true)
+                .await;
+        }
+
+        Ok(())
     }
 }

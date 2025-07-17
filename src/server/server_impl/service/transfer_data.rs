@@ -1,7 +1,14 @@
-//! request of Service 36
+//! response of Service 36
 
-use crate::server::{util, DoCanServer};
-use iso14229_1::{request::Request, response::Response, DidConfig, Iso14229Error};
+use crate::{
+    constants::LOG_TAG_SERVER,
+    server::{util, DoCanServer},
+};
+use iso14229_1::{
+    request::{self, Request},
+    response::{self, Response},
+    DidConfig, Iso14229Error,
+};
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
 
@@ -14,8 +21,24 @@ where
     pub(crate) async fn transfer_data(
         &self,
         req: Request,
-        cfg: &DidConfig,
+        _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
-        todo!()
+        let service = req.service();
+        let data = match req.data::<request::TransferData>(_cfg) {
+            Ok(v) => response::TransferData {
+                sequence: v.sequence,
+                data: v.data,
+            }
+            .into(),
+            Err(e) => {
+                rsutil::warn!("{} Failed to parse request data: {:?}", LOG_TAG_SERVER, e);
+                util::invalid_format(service)
+            }
+        };
+
+        self.transmit_response(Response::try_from((&data, _cfg))?, true)
+            .await;
+
+        Ok(())
     }
 }

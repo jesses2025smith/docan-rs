@@ -1,7 +1,11 @@
 //! request of Service 28
 
-use crate::server::{util, DoCanServer};
-use iso14229_1::{request::Request, response::Response, DidConfig, Iso14229Error};
+use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
+use iso14229_1::{
+    request::{CommunicationCtrl, Request},
+    response::{Code, Response},
+    DidConfig, Iso14229Error,
+};
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
 
@@ -14,8 +18,19 @@ where
     pub(crate) async fn communication_ctrl(
         &self,
         req: Request,
-        cfg: &DidConfig,
+        _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
-        todo!()
+        let service = req.service();
+        let resp = match req.data::<CommunicationCtrl>(_cfg) {
+            Ok(ctx) => Response::try_from((service, vec![ctx.comm_type.value()], _cfg))?,
+            Err(e) => {
+                rsutil::warn!("{} Failed to parse request data: {:?}", LOG_TAG_SERVER, e);
+                Response::new_negative(service, Code::GeneralReject)
+            }
+        };
+
+        self.transmit_response(resp, true).await;
+
+        Ok(())
     }
 }

@@ -1,7 +1,11 @@
 //! request of Service 2A
 
-use crate::server::{util, DoCanServer};
-use iso14229_1::{request::Request, response::Response, DidConfig, Iso14229Error};
+use crate::server::DoCanServer;
+use iso14229_1::{
+    request::Request,
+    response::{Code, Response},
+    DidConfig, Iso14229Error,
+};
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
 
@@ -14,8 +18,16 @@ where
     pub(crate) async fn read_data_by_pid(
         &self,
         req: Request,
-        cfg: &DidConfig,
+        _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
-        todo!()
+        let service = req.service();
+
+        self.transmit_response(
+            Response::new_negative(service, Code::ServiceNotSupported),
+            true,
+        )
+        .await;
+
+        Ok(())
     }
 }

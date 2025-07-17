@@ -14,14 +14,14 @@ where
     pub(crate) async fn clear_diagnostic_info(
         &self,
         req: Request,
-        cfg: &DidConfig,
+        _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
-        let data = util::positive_response(service, None, vec![], cfg);
+        let data = util::positive_response(service, None, vec![], _cfg);
 
         self.context.clear_diagnostic_info().await;
 
-        self.transmit_response(Response::try_from((&data, cfg))?)
+        self.transmit_response(Response::try_from((&data, _cfg))?, true)
             .await;
 
         Ok(())

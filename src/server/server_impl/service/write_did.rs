@@ -18,29 +18,33 @@ where
     pub(crate) async fn write_did(
         &mut self,
         req: Request,
-        cfg: &DidConfig,
+        _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
         let resp = match self.session.session_type().await {
-            SessionType::Extended => match req.data::<WriteDID>(cfg) {
+            SessionType::Extended => match req.data::<WriteDID>(_cfg) {
                 Ok(ctx) => {
                     let did = ctx.0.did;
                     if self.context.set_static_did(&did, ctx.0.data).await {
                         let data: u16 = did.into();
-                        Response::try_from((service, data.to_be_bytes(), cfg))?
+                        Response::try_from((service, data.to_be_bytes(), _cfg))?
                     } else {
                         Response::new_negative(service, Code::GeneralReject)
                     }
                 }
                 Err(e) => {
-                    rsutil::warn!("{} can't parse did context from data", LOG_TAG_SERVER);
+                    rsutil::warn!(
+                        "{} can't parse did context from data: {}",
+                        LOG_TAG_SERVER,
+                        e
+                    );
                     Response::new_negative(service, Code::GeneralReject)
                 }
             },
-            _ => Response::new_negative(service, Code::SubFunctionNotSupportedInActiveSession),
+            _ => Response::new_negative(service, Code::ServiceNotSupportedInActiveSession),
         };
 
-        self.transmit_response(resp).await;
+        self.transmit_response(resp, true).await;
 
         Ok(())
     }
