@@ -47,10 +47,10 @@ jobs:
         run: |
           set -e
 
-          INFO=$(cargo metadata --no-deps --format-version 1 | jq -r \
+          META_DATA=$(cargo metadata --no-deps --format-version 1 | jq -r \
             ".packages[] | {name: .name, version: .version}")
-          CRATE=$(echo ${INFO} | jq -r ".name")
-          $VERSION=$(echo ${INFO} | jq -r ".version")
+          CRATE=$(echo ${META_DATA} | jq -r ".name")
+          VERSION=$(echo ${META_DATA} | jq -r ".version")
           echo "Detected $CRATE version: $VERSION"
           EXISTS=$(curl -s https://crates.io/api/v1/crates/${CRATE} | jq -r \
             ".versions[] | select(.num==\"$VERSION\") | .num" || true)
@@ -60,6 +60,4 @@ jobs:
           else
             echo "Publishing {CRATE}..."
             cargo publish -p ${CRATE} --locked --verbose --token ${{ secrets.CRATES_TOKEN }}
-            echo "Waiting for crates.io to sync..."
-            sleep 15
           fi
