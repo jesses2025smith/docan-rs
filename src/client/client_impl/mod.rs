@@ -1,6 +1,6 @@
 mod trait_impl;
 
-use crate::{client::context::Context, error::DoCanError};
+use crate::{client::context::Context, constants::LOG_TAG_CLIENT, error::DoCanError};
 use iso14229_1::{
     request::Request,
     response::{Code, Response},
@@ -50,13 +50,13 @@ where
         p2_offset: Option<u16>,
     ) -> Self {
         Self {
-            isotp: CanIsoTp::new(device, channel, addr).await,
+            isotp: CanIsoTp::new(device, channel, addr, false).await,
             context: Context::new(p2_offset, byte_order),
         }
     }
 
     #[inline(always)]
-    pub fn iso_tp(&mut self) -> &mut CanIsoTp<D, C, F> {
+    pub fn tp_layer(&mut self) -> &mut CanIsoTp<D, C, F> {
         &mut self.isotp
     }
 
@@ -68,7 +68,7 @@ where
     fn response_service_check(response: &Response, target: Service) -> Result<bool, DoCanError> {
         let service = response.service();
         if response.is_negative() {
-            let nrc_code = response.nrc_code().map_err(DoCanError::ISO14229Error)?;
+            let nrc_code = response.nrc_code().map_err(DoCanError::Iso14229Error)?;
             match nrc_code {
                 Code::RequestCorrectlyReceivedResponsePending => Ok(true),
                 _ => Err(DoCanError::NRCError {
@@ -132,10 +132,11 @@ where
             .wait_data(timing.p2_ms() + p2_offset)
             .await
             .map_err(DoCanError::IsoTpError)?;
-        let mut response = Response::try_from((data, cfg)).map_err(DoCanError::ISO14229Error)?;
+        let mut response = Response::try_from((data, cfg)).map_err(DoCanError::Iso14229Error)?;
         while Self::response_service_check(&response, service)? {
             rsutil::debug!(
-                "DoCANClient - tester present when {:?}",
+                "{} tester present when {:?}",
+                LOG_TAG_CLIENT,
                 Code::RequestCorrectlyReceivedResponsePending
             );
             let (_, request) =
@@ -153,7 +154,7 @@ where
                 .await
                 .map_err(DoCanError::IsoTpError)?;
 
-            response = Response::try_from((data, cfg)).map_err(DoCanError::ISO14229Error)?;
+            response = Response::try_from((data, cfg)).map_err(DoCanError::Iso14229Error)?;
         }
 
         Ok(response)
@@ -193,7 +194,7 @@ where
             sub_func |= SUPPRESS_POSITIVE;
         }
         let request = Request::new(service, Some(sub_func), vec![], &did)
-            .map_err(DoCanError::ISO14229Error)?;
+            .map_err(DoCanError::Iso14229Error)?;
 
         Ok((service, request))
     }

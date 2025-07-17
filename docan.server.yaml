@@ -1,0 +1,13 @@
+address:
+  tx_id: 0x7E8
+  rx_id: 0x7E0
+  fid: 0x7DF
+timing:
+  p2: 50
+  p2_star: 5000
+extend_sa_level: 3
+program_sa_level: 5
+sa_salt: [0x01, 0x02, 0x03, 0x04]
+did_cfg:
+  0xF190: 17
+byte_order: little

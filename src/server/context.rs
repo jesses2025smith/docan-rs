@@ -1,244 +1,137 @@
-mod session_manager;
-use session_manager::SessionManager;
-mod diag_info_manager;
-use diag_info_manager::DiagInfoManager;
-
-use crate::{buffer::IsoTpBuffer, server::util, DoCanError, SecurityAlgo};
-use iso14229_1::{
-    request::Request,
-    response::{self, Code, Response},
-    *,
-};
-use iso15765_2::{AddressType, CanIsoTp, IsoTpEvent, IsoTpEventListener};
-use rs_can::CanFrame;
-use std::{fmt::Display, thread, time::Duration};
-
-#[derive(Debug, Default, Clone)]
-pub struct IsoTpListener {
-    pub(crate) buffer: IsoTpBuffer,
-}
-
-#[async_trait::async_trait]
-impl IsoTpEventListener for IsoTpListener {
-    #[inline(always)]
-    async fn buffer_data(&mut self) -> Option<IsoTpEvent> {
-        self.buffer.get()
-    }
-
-    #[inline(always)]
-    async fn clear_buffer(&mut self) {
-        self.buffer.clear();
-    }
-
-    #[inline(always)]
-    async fn on_iso_tp_event(&mut self, event: IsoTpEvent) {
-        self.buffer.set(event);
-    }
-}
+use crate::{server::session::SessionManager, Config, DoCanError, SecurityAlgo};
+use bytes::{Bytes, BytesMut};
+use iso14229_1::{response::SessionTiming, DataIdentifier, DidConfig};
+use std::{collections::HashMap, sync::Arc};
+use tokio::{fs::read, sync::{Mutex, MutexGuard}};
 
 #[derive(Clone)]
-pub struct Context<C, F> {
-    flag: bool,
-    iso_tp: CanIsoTp<C, F>,
-    listener: IsoTpListener,
-    config: Configuration,
-    security_algo: Option<SecurityAlgo>,
-    session_manager: SessionManager,
+pub(crate) struct Context {
+    pub(crate) config: Config,
+    /// static did
+    pub(crate) did_st: Arc<Mutex<HashMap<DataIdentifier, Bytes>>>,
+    /// dynamic did
+    pub(crate) did_dyn: Arc<Mutex<HashMap<DataIdentifier, Bytes>>>,
+    pub(crate) sa_algo: Arc<Mutex<Option<SecurityAlgo>>>,
+    pub(crate) sa_ctx: Arc<Mutex<Option<(u8, Bytes)>>>,
+    pub(crate) session: SessionManager,
 }
 
-impl<C, F> Context<C, F>
-where
-    C: Display + Clone,
-    F: CanFrame<Channel = C>,
-{
-    pub fn new(iso_tp: CanIsoTp<C, F>, listener: IsoTpListener) -> Self {
-        Self {
-            flag: true,
-            iso_tp,
-            listener,
-            config: Default::default(),
-            security_algo: Default::default(),
-            session_manager: Default::default(),
-        }
+impl Context {
+    pub async fn new() -> Result<Self, DoCanError> {
+        let reader = read("docan.server.yaml")
+            .await
+            .map_err(|e| DoCanError::OtherError(format!("{:?}", e)))?;
+        let config = serde_yaml::from_slice::<Config>(reader.as_slice())
+            .map_err(|e| DoCanError::OtherError(format!("{:?}", e)))?;
+
+        Ok(Self {
+            config,
+            did_st: Default::default(),
+            did_dyn: Default::default(),
+            sa_algo: Default::default(),
+            sa_ctx: Default::default(),
+            session: Default::default(),
+        })
     }
 
-    pub fn server(&mut self, interval: u64) -> Result<(), DoCanError> {
-        while self.flag {
-            if let Some(event) = self.listener.buffer.get() {
-                match event {
-                    IsoTpEvent::Wait => self.session_manager.keep_session(),
-                    IsoTpEvent::FirstFrameReceived => {} // nothing to do
-                    IsoTpEvent::DataReceived(data) => {
-                        // rsutil::trace!("DoCANServer - data received: {}", hex::encode(&data));
-                        if data.is_empty() {
-                            continue;
-                        }
+    pub async fn reset(&self) {
+        self.did_dyn.lock().await.clear();
+        self.session.reset().await;
+    }
 
-                        let service = data[0];
-                        let data = match self.session_manager.service_check(service) {
-                            Some(data) => Some(data),
-                            None => match Request::try_from_cfg(data, &self.config) {
-                                Ok(request) => {
-                                    let service = request.service();
-                                    match service {
-                                        Service::SessionCtrl => match request.sub_function() {
-                                            Some(sub_func) => {
-                                                match sub_func.function::<SessionType>() {
-                                                    Ok(r#type) => {
-                                                        self.session_manager.change_session(r#type);
-                                                        if sub_func.is_suppress_positive() {
-                                                            None
-                                                        } else {
-                                                            let session_timing =
-                                                                response::SessionTiming::default();
-                                                            Some(self.positive_response(
-                                                                service,
-                                                                Some(sub_func.into()),
-                                                                session_timing.into(),
-                                                            ))
-                                                        }
-                                                    }
-                                                    Err(_) => Some(util::sub_func_not_support(
-                                                        service.into(),
-                                                    )),
-                                                }
-                                            }
-                                            None => {
-                                                Some(util::sub_func_not_support(service.into()))
-                                            }
-                                        },
-                                        Service::ECUReset => {
-                                            match request.sub_function() {
-                                                Some(sub_func) => {
-                                                    if sub_func.is_suppress_positive() {
-                                                        None
-                                                    } else {
-                                                        let sub_func: ECUResetType =
-                                                            sub_func.function().unwrap();
-                                                        let data = match sub_func {
-                                                            ECUResetType::EnableRapidPowerShutDown => vec![1, ],
-                                                            _ => vec![],
-                                                        };
+    #[inline(always)]
+    pub fn get_timing(&self) -> &SessionTiming {
+        &self.config.timing
+    }
 
-                                                        Some(self.positive_response(
-                                                            service,
-                                                            Some(sub_func.into()),
-                                                            data,
-                                                        ))
-                                                    }
-                                                }
-                                                None => {
-                                                    Some(util::sub_func_not_support(service.into()))
-                                                }
-                                            }
-                                        }
-                                        Service::ClearDiagnosticInfo => {
-                                            self.clear_diag_info();
-                                            Some(self.positive_response(service, None, vec![]))
-                                        }
-                                        // Service::ReadDTCInfo => {}
-                                        // Service::ReadDID => {}
-                                        // Service::ReadMemByAddr => {}
-                                        // Service::ReadScalingDID => {}
-                                        Service::SecurityAccess => {
-                                            None // TODO
-                                        }
-                                        // Service::CommunicationCtrl => {}
-                                        // #[cfg(any(feature = "std2020"))]
-                                        // Service::Authentication => {}
-                                        // Service::ReadDataByPeriodId => {}
-                                        // Service::DynamicalDefineDID => {}
-                                        // Service::WriteDID => {}
-                                        // Service::IOCtrl => {}
-                                        // Service::RoutineCtrl => {}
-                                        // Service::RequestDownload => {}
-                                        // Service::RequestUpload => {}
-                                        // Service::TransferData => {}
-                                        Service::RequestTransferExit => {
-                                            None // TODO
-                                        }
-                                        // #[cfg(any(feature = "std2013", feature = "std2020"))]
-                                        // Service::RequestFileTransfer => {}
-                                        // Service::WriteMemByAddr => {}
-                                        Service::TesterPresent => match request.sub_function() {
-                                            Some(sub_func) => {
-                                                if sub_func.is_suppress_positive() {
-                                                    self.session_manager.keep_session();
-                                                    None
-                                                } else {
-                                                    Some(self.positive_response(
-                                                        service,
-                                                        Some(sub_func.into()),
-                                                        vec![],
-                                                    ))
-                                                }
-                                            }
-                                            None => {
-                                                Some(util::sub_func_not_support(service.into()))
-                                            }
-                                        },
-                                        // #[cfg(any(feature = "std2006", feature = "std2013"))]
-                                        // Service::AccessTimingParam => {}
-                                        // Service::SecuredDataTrans => {}
-                                        // Service::CtrlDTCSetting => {}
-                                        // Service::ResponseOnEvent => {}
-                                        // Service::LinkCtrl => {}
-                                        _ => Some(util::service_not_support(service.into())),
-                                    }
-                                }
-                                Err(err) => {
-                                    rsutil::warn!(
-                                        "DoCANServer - error: {} when parsing response",
-                                        err
-                                    );
-                                    Some(vec![
-                                        Service::NRC.into(),
-                                        service,
-                                        Code::GeneralReject.into(),
-                                    ])
-                                }
-                            },
-                        };
+    #[inline(always)]
+    pub fn get_did_config(&self) -> &DidConfig {
+        &self.config.did_cfg
+    }
 
-                        if let Some(data) = data {
-                            self.iso_tp
-                                .write(AddressType::Physical, data)
-                                .map_err(DoCanError::IsoTpError)?;
-                        }
-                    }
-                    IsoTpEvent::ErrorOccurred(e) => {
-                        rsutil::warn!("DoCANServer - iso-tp error: {}", e);
-                        // TODO
-                    }
+    pub async fn set_static_did<T: AsRef<[u8]>>(&mut self, did: &DataIdentifier, data: T) -> bool {
+        match self.config.did_cfg.get(did) {
+            Some(&len) => {
+                let data = data.as_ref();
+                if len != data.len() {
+                    false
+                } else {
+                    self.did_st
+                        .lock()
+                        .await
+                        .insert(*did, BytesMut::from(data).freeze());
+                    true
                 }
             }
-
-            thread::sleep(Duration::from_micros(interval));
+            None => false,
         }
-
-        Ok(())
-    }
-
-    pub fn stop(&mut self) -> Result<(), DoCanError> {
-        self.flag = false;
-
-        Ok(())
     }
 
     #[inline(always)]
-    fn clear_diag_info(&mut self) {
-        // TODO
+    pub async fn get_static_did(&self, did: &DataIdentifier) -> Option<Bytes> {
+        self.did_get_util(self.did_st.lock().await, &did)
     }
 
     #[inline(always)]
-    fn positive_response(&self, service: Service, sub_func: Option<u8>, data: Vec<u8>) -> Vec<u8> {
-        match Response::new(service, sub_func, data, &self.config) {
-            Ok(v) => v.into(),
-            Err(_) => vec![
-                Service::NRC.into(),
-                service.into(),
-                Code::GeneralReject.into(),
-            ],
+    pub async fn set_dynamic_did<T: AsRef<[u8]>>(&mut self, did: &DataIdentifier, data: T) -> bool {
+        match self.config.did_cfg.get(did) {
+            Some(&len) => {
+                let data = data.as_ref();
+                if len != data.len() {
+                    false
+                } else {
+                    self.did_dyn
+                        .lock()
+                        .await
+                        .insert(*did, BytesMut::from(data).freeze());
+                    true
+                }
+            }
+            None => false,
         }
     }
+
+    #[inline(always)]
+    pub async fn get_dynamic_did(&self, did: &DataIdentifier) -> Option<Bytes> {
+        self.did_get_util(self.did_dyn.lock().await, &did)
+    }
+
+    #[inline(always)]
+    pub fn get_security_salt(&self) -> &[u8] {
+        &self.config.sa_salt
+    }
+
+    #[inline(always)]
+    pub(crate) async fn set_security_algo(&self, alg: SecurityAlgo) {
+        let _ = self.sa_algo.lock().await.replace(alg);
+    }
+
+    #[inline(always)]
+    pub async fn get_security_algo(&self) -> Option<SecurityAlgo> {
+        self.sa_algo.lock().await.clone()
+    }
+
+    #[inline(always)]
+    fn did_get_util<'a>(
+        &self,
+        guard: MutexGuard<'a, HashMap<DataIdentifier, Bytes>>,
+        did: &DataIdentifier,
+    ) -> Option<Bytes> {
+        match guard.get(did) {
+            Some(data) => Some(data.clone()),
+            None => {
+                drop(guard);
+                match self.config.did_cfg.get(did) {
+                    Some(&len) => {
+                        let mut data = Vec::with_capacity(len);
+                        data.resize(len, 0);
+                        Some(Bytes::from(data))
+                    }
+                    None => None,
+                }
+            }
+        }
+    }
+
+    pub(crate) async fn clear_diagnostic_info(&self) {}
 }
