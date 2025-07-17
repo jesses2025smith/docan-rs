@@ -29,7 +29,7 @@ pub struct Config {
 pub trait Server {
     async fn update_address(&self, address: Address);
     async fn update_security_algo(&self, algo: SecurityAlgo);
-    async fn service_forever(&mut self, interval: u64);
+    async fn service_forever(&mut self, interval_us: u64);
 
     async fn service_stop(&mut self);
 }

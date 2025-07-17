@@ -234,8 +234,8 @@ where
         self.context.set_security_algo(algo).await;
     }
 
-    async fn service_forever(&mut self, interval: u64) {
-        self.isotp.start(interval).await;
+    async fn service_forever(&mut self, interval_us: u64) {
+        self.isotp.start(interval_us).await;
         let mut clone = self.clone();
         let session = self.session.clone();
         let handle = spawn(async move { session.work().await });

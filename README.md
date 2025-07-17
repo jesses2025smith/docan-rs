@@ -5,13 +5,15 @@
 
 ## Overview
 
-DoCAN(Diagnostic Communication over Controller Area Network) is a specialized protocol used primarily in automotive and industrial settings.
+DoCAN(Diagnostic Communication over Controller Area Network) 
+is a specialized protocol used primarily in automotive and industrial settings.
 
 The driver must implement the CanDriver trait defined in [`rs-can`](https://crates.io/crates/rs-can).
 
 ##### [The Server example](examples)
-A server configuration file named `docan.server.yaml` needs to be added under the executable file.
-[Example file](docan.server.yaml)
+A server configuration file named [docan.server.yaml](docan.server.yaml) 
+needs to be added in the same directory as the executable.
+
 ```rust
 use docan_rs::{DoCanServer, Server};
 use rs_can::{CanDevice, DeviceBuilder};
