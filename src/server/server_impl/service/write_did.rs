@@ -21,7 +21,7 @@ where
         _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
-        let resp = match self.session.session_type().await {
+        let resp = match self.session.get_session_type().await {
             SessionType::Extended => match req.data::<WriteDID>(_cfg) {
                 Ok(ctx) => {
                     let did = ctx.0.did;

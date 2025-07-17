@@ -7,14 +7,14 @@ use tokio::{sync::Mutex, time::interval};
 
 /// Session manager.
 #[derive(Debug, Default, Clone)]
-pub struct SessionManager {
+pub(crate) struct SessionManager {
     /// current session type
     pub(crate) r#type: Arc<Mutex<SessionType>>,
     /// the start timestamp
     pub(crate) start: Arc<Mutex<Option<Instant>>>,
     /// Keep Duration
     pub(crate) duration: Duration,
-    pub(crate) unlocked: Arc<Mutex<bool>>,
+    pub(crate) sa_level: Arc<Mutex<u8>>,
 }
 
 impl SessionManager {
@@ -25,27 +25,38 @@ impl SessionManager {
         }
     }
 
+    pub async fn reset(&self) {
+        self.change(Default::default()).await;
+        let _ = self.start.lock().await.take();
+    }
+
     /// change session type
     #[inline(always)]
-    pub async fn change(&mut self, r#type: SessionType) {
+    pub async fn change(&self, r#type: SessionType) {
         *self.r#type.lock().await = r#type;
     }
     /// Keep session or start non-default session manager
     #[inline(always)]
-    pub async fn keep(&self, unlocked: bool) {
+    pub async fn keep(&self) {
         self.start.lock().await.replace(Instant::now());
-        *self.unlocked.lock().await = unlocked;
     }
     /// get current session type
-    /// if the server is locked, return default session
-    /// else return current session
     #[inline(always)]
-    pub async fn session_type(&self) -> SessionType {
-        if *self.unlocked.lock().await {
-            self.r#type.lock().await.clone()
-        } else {
-            SessionType::default()
-        }
+    pub async fn set_session_type(&self, r#type: SessionType) {
+        *self.r#type.lock().await = r#type;
+    }
+    /// get current session type
+    #[inline(always)]
+    pub async fn get_session_type(&self) -> SessionType {
+        self.r#type.lock().await.clone()
+    }
+    #[inline(always)]
+    pub async fn set_security_access_level(&self, level: u8) {
+        *self.sa_level.lock().await = level;
+    }
+    #[inline(always)]
+    pub async fn get_security_access_level(&self) -> u8 {
+        self.sa_level.lock().await.clone()
     }
     /// enable task
     pub async fn work(&self) {
@@ -58,11 +69,8 @@ impl SessionManager {
             if let Some(non_def_start) = guard.clone() {
                 if non_def_start.elapsed() >= self.duration {
                     let _ = guard.take();
-                    {
-                        let mut guard = self.r#type.lock().await;
-                        *guard = Default::default();
-                        // free `type` lock
-                    }
+                    self.set_session_type(Default::default()).await;
+                    self.set_security_access_level(Default::default()).await;
                 }
             }
         }

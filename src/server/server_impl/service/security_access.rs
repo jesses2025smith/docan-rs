@@ -37,21 +37,28 @@ where
                     } else {
                         match guard.take() {
                             Some(ctx) => {
-                                let level = v.into();
+                                let level: u8 = v.into();
                                 if level - 1 != ctx.0 {
                                     Response::new_negative(service, Code::ConditionsNotCorrect)
                                 } else {
                                     match self.context.get_security_algo().await {
                                         Some(algo) => {
-                                            // TODO salt
-                                            match algo(ctx.0, ctx.1.as_ref(), &vec![]) {
+                                            let level = ctx.0;
+                                            let seed = ctx.1.as_ref();
+                                            let salt = self.context.get_security_salt();
+                                            match algo(level, seed, salt.as_ref()) {
                                                 Ok(v) => match v {
-                                                    Some(v) => Response::new(
-                                                        service,
-                                                        Some(level),
-                                                        v,
-                                                        _cfg,
-                                                    )?,
+                                                    Some(v) => {
+                                                        self.session
+                                                            .set_security_access_level(level)
+                                                            .await;
+                                                        Response::new(
+                                                            service,
+                                                            Some(level),
+                                                            v,
+                                                            _cfg,
+                                                        )?
+                                                    }
                                                     None => Response::new_negative(
                                                         service,
                                                         Code::SecurityAccessDenied,

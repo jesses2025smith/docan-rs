@@ -23,12 +23,16 @@ where
         let service = req.service();
         let data = match req.sub_function() {
             Some(sf) => {
-                if sf.is_suppress_positive() {
-                    None // suppress positive
-                } else {
-                    match sf.function::<SessionType>() {
-                        Ok(r#type) => {
-                            self.session.change(r#type).await;
+                match sf.function::<SessionType>() {
+                    Ok(r#type) => {
+                        self.session.change(r#type).await;
+                        if r#type != Default::default() {
+                            self.session.keep().await;
+                        }
+
+                        if sf.is_suppress_positive() {
+                            None // suppress positive
+                        } else {
                             Some(util::positive_response(
                                 service,
                                 Some(r#type.into()),
@@ -36,14 +40,10 @@ where
                                 _cfg,
                             ))
                         }
-                        Err(e) => {
-                            rsutil::warn!(
-                                "{} Failed to parse sub-function: {:?}",
-                                LOG_TAG_SERVER,
-                                e
-                            );
-                            Some(util::sub_func_not_support(service))
-                        }
+                    }
+                    Err(e) => {
+                        rsutil::warn!("{} Failed to parse sub-function: {:?}", LOG_TAG_SERVER, e);
+                        Some(util::sub_func_not_support(service))
                     }
                 }
             }

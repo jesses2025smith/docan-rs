@@ -17,7 +17,7 @@ keywords = [
 default = ["std2020", "client", "server"]
 
 client = ["iso15765-2/can", "iso15765-2/std2004"]
-server = ["iso15765-2/can", "iso15765-2/std2004", "rand"]
+server = ["iso15765-2/can", "iso15765-2/std2004", "rand", "serde", "serde_yaml"]
 
 std2006 = ["iso14229-1/std2006"]
 std2013 = ["iso14229-1/std2013"]
@@ -32,12 +32,10 @@ async-trait = "0.1"
 bytes = "1.10"
 hex = "0.4"
 log = "0.4"
+rs-can = "0.3.0-b0"
 rsutil = { version = "0.1", features = ["log", "types"] }
 thiserror = "2"
-tokio = { version = "1", features = ["time"] }
-
-[dependencies.rs-can]
-version = "0.3.0-b0"
+tokio = { version = "1", features = ["time", "fs"] }
 
 [dependencies.iso14229-1]
 path = "../iso-std-rs/iso14229-1"
@@ -51,6 +49,14 @@ version = "0.1.0-b1"
 default-features = false
 
 [dependencies.rand]
+version = "0.9"
+optional = true
+
+[dependencies.serde]
+version = "1"
+optional = true
+
+[dependencies.serde_yaml]
 version = "0.9"
 optional = true
 

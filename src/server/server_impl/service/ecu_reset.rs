@@ -22,11 +22,12 @@ where
         let service = req.service();
         let data = match req.sub_function() {
             Some(sf) => {
-                if sf.is_suppress_positive() {
-                    None // suppress positive
-                } else {
-                    match sf.function::<ECUResetType>() {
-                        Ok(r#type) => {
+                match sf.function::<ECUResetType>() {
+                    Ok(r#type) => {
+                        self.context.reset().await;
+                        if sf.is_suppress_positive() {
+                            None // suppress positive
+                        } else {
                             let data = match r#type {
                                 ECUResetType::EnableRapidPowerShutDown => vec![1],
                                 _ => vec![],
@@ -38,14 +39,10 @@ where
                                 _cfg,
                             ))
                         }
-                        Err(e) => {
-                            rsutil::warn!(
-                                "{} Failed to parse sub-function: {:?}",
-                                LOG_TAG_SERVER,
-                                e
-                            );
-                            Some(util::sub_func_not_support(service))
-                        }
+                    }
+                    Err(e) => {
+                        rsutil::warn!("{} Failed to parse sub-function: {:?}", LOG_TAG_SERVER, e);
+                        Some(util::sub_func_not_support(service))
                     }
                 }
             }

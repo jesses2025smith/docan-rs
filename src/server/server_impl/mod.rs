@@ -3,16 +3,15 @@ mod service;
 use crate::{
     constants::LOG_TAG_SERVER,
     server::{context, session::SessionManager},
-    SecurityAlgo, Server,
+    DoCanError, SecurityAlgo, Server,
 };
 use iso14229_1::{
     request::Request,
     response::{Code, Response},
-    DataIdentifier, Iso14229Error, Service,
+    Iso14229Error, Service,
 };
 use iso15765_2::{Address, AddressType, CanIsoTp, IsoTp, IsoTpError};
 use rs_can::{CanDevice, CanFrame};
-use rsutil::types::ByteOrder;
 use std::{fmt::Display, sync::Arc};
 use tokio::{spawn, task::JoinHandle};
 
@@ -30,13 +29,14 @@ where
     C: Clone + Eq + Display + Send + Sync + 'static,
     F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
 {
-    pub async fn new(device: D, channel: C, addr: Address, byte_order: ByteOrder) -> Self {
-        Self {
-            isotp: CanIsoTp::new(device, channel, addr, true).await,
+    pub async fn new(device: D, channel: C) -> Result<Self, DoCanError> {
+        let context = context::Context::new().await?;
+        Ok(Self {
+            isotp: CanIsoTp::new(device, channel, context.config.address, true).await,
             session: SessionManager::new(None),
-            context: context::Context::new(byte_order),
+            context,
             handles: Default::default(),
-        }
+        })
     }
 
     #[inline(always)]
@@ -46,8 +46,8 @@ where
 
     async fn server(&mut self) {
         loop {
-            let timing = self.context.get_timing().await;
-            let cfg = self.context.get_did_config().await;
+            let timing = self.context.get_timing().clone();
+            let cfg = self.context.get_did_config().clone();
             if let Ok(data) = self.isotp.wait_data(timing.p2_ms()).await {
                 // rsutil::info!("{} Received data: {}", LOG_TAG_SERVER, hex::encode(&data));
                 match data.len() {
@@ -181,7 +181,6 @@ where
             .await;
     }
 
-    #[inline(always)]
     pub(crate) async fn transmit_response(&self, resp: Response, flag: bool) {
         let service = resp.service();
         let data: Vec<_> = resp.into();
@@ -209,7 +208,7 @@ where
                 _ => None,
             } {
                 let resp = Response::new_negative(service, code);
-                self.transmit_response(resp, false).await;
+                Box::pin(self.transmit_response(resp, false)).await;
             }
         }
     }
@@ -230,16 +229,6 @@ where
     #[inline(always)]
     async fn update_security_algo(&self, algo: SecurityAlgo) {
         self.context.set_security_algo(algo).await;
-    }
-
-    #[inline(always)]
-    async fn add_data_identifier(&self, did: DataIdentifier, length: usize) {
-        self.context.add_did(did, length).await;
-    }
-
-    #[inline(always)]
-    async fn remove_data_identifier(&self, did: DataIdentifier) {
-        self.context.remove_did(&did).await;
     }
 
     async fn service_forever(&mut self, interval: u64) {

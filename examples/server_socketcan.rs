@@ -1,8 +1,5 @@
 use docan_rs::{DoCanServer, Server};
-use iso14229_1::DataIdentifier;
-use iso15765_2::Address;
 use rs_can::{CanDevice, DeviceBuilder};
-use rsutil::types::ByteOrder;
 use socketcan_rs::SocketCan;
 use tokio::signal::ctrl_c;
 
@@ -16,16 +13,9 @@ async fn main() -> anyhow::Result<()> {
     let mut server = DoCanServer::new(
         device.clone(),
         iface.clone(),
-        Address {
-            tx_id: 0x7E8,
-            rx_id: 0x7E0,
-            fid: 0x7DF,
-        },
-        ByteOrder::default(),
     )
-    .await;
+    .await?;
 
-    server.add_data_identifier(DataIdentifier::VIN, 17).await;
     server.service_forever(100).await;
 
     match ctrl_c().await {
