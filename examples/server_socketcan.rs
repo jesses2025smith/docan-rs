@@ -17,13 +17,14 @@ async fn main() -> anyhow::Result<()> {
     match ctrl_c().await {
         Ok(()) => {
             println!("\nCtrl+C Signal, exiting...");
-            server.service_stop().await;
-            device.shutdown();
         }
         Err(err) => {
             eprintln!("Ctrl+C error: {:?}", err);
         }
     }
+
+    server.service_stop().await;
+    device.shutdown();
 
     Ok(())
 }

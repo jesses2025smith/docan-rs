@@ -29,7 +29,7 @@ where
                 Ok(v) => {
                     let mut guard = self.context.sa_ctx.lock().await;
                     if v.is_request_seed() {
-                        let data = util::gen_seed(4);
+                        let data = util::gen_seed(self.context.config.seed_len);
                         let resp = Response::new(service, Some(v.into()), &data, _cfg)?;
                         let _ = guard.replace((v.into(), Bytes::from(data)));
 

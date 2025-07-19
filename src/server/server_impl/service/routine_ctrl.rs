@@ -1,9 +1,7 @@
-//! request of Service 31
+//! response of Service 31
 
-use crate::{
-    constants::LOG_TAG_SERVER,
-    server::{util, DoCanServer},
-};
+use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
+use iso14229_1::response::Code;
 use iso14229_1::{
     request::{Request, RoutineCtrl},
     response::Response,
@@ -24,7 +22,8 @@ where
         _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
-        let data = match req.data::<RoutineCtrl>(_cfg) {
+
+        let resp = match req.data::<RoutineCtrl>(_cfg) {
             Ok(val) => match req.sub_function() {
                 Some(sf) => {
                     if sf.is_suppress_positive() {
@@ -33,12 +32,12 @@ where
                         match sf.function::<RoutineCtrlType>() {
                             Ok(r#type) => {
                                 let val: u16 = val.routine_id.into();
-                                Some(util::positive_response(
+                                Some(Response::new(
                                     service,
                                     Some(r#type.into()),
                                     val.to_be_bytes(),
                                     _cfg,
-                                ))
+                                )?)
                             }
                             Err(e) => {
                                 rsutil::warn!(
@@ -46,22 +45,27 @@ where
                                     LOG_TAG_SERVER,
                                     e
                                 );
-                                Some(util::sub_func_not_support(service))
+                                Some(Response::new_negative(
+                                    service,
+                                    Code::SubFunctionNotSupported,
+                                ))
                             }
                         }
                     }
                 }
-                None => Some(util::sub_func_not_support(service)),
+                None => Some(Response::new_negative(service, Code::GeneralReject)),
             },
             Err(e) => {
-                rsutil::warn!("{} Failed to parse request data: {:?}", LOG_TAG_SERVER, e);
-                Some(util::sub_func_not_support(service))
+                rsutil::warn!("{} failed to parse request data: {:?}", LOG_TAG_SERVER, e);
+                Some(Response::new_negative(
+                    service,
+                    Code::IncorrectMessageLengthOrInvalidFormat,
+                ))
             }
         };
 
-        if let Some(data) = data {
-            self.transmit_response(Response::try_from((&data, _cfg))?, true)
-                .await;
+        if let Some(resp) = resp {
+            self.transmit_response(resp, true).await;
         }
 
         Ok(())

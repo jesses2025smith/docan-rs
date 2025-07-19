@@ -1,10 +1,10 @@
-//! request of Service 2F
+//! response of Service 2F
 
 use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
 use iso14229_1::{
     request::{self, Request},
     response::{self, Code, Response},
-    DidConfig, Iso14229Error,
+    DidConfig, Iso14229Error, SessionType,
 };
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
@@ -15,18 +15,27 @@ where
     C: Clone + Eq + Display + Send + Sync + 'static,
     F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
 {
-    pub(crate) async fn io_ctrl(&self, req: Request, cfg: &DidConfig) -> Result<(), Iso14229Error> {
+    pub(crate) async fn io_ctrl(
+        &self,
+        req: Request,
+        _cfg: &DidConfig,
+    ) -> Result<(), Iso14229Error> {
         let service = req.service();
-        let resp = match req.data::<request::IOCtrl>(cfg) {
-            Ok(ctx) => {
-                let data = response::IOCtrl::new(ctx.did, ctx.option.param, ctx.option.state);
 
-                let data: Vec<_> = data.into();
-                Response::new(service, None, data, cfg)?
-            }
-            Err(e) => {
-                rsutil::warn!("{} Failed to parse request data: {:?}", LOG_TAG_SERVER, e);
-                Response::new_negative(service, Code::GeneralReject)
+        let resp = if self.session.get_session_type().await == SessionType::Default {
+            Response::new_negative(service, Code::ServiceNotSupportedInActiveSession)
+        } else {
+            match req.data::<request::IOCtrl>(_cfg) {
+                Ok(ctx) => {
+                    let data = response::IOCtrl::new(ctx.did, ctx.option.param, ctx.option.state);
+
+                    let data: Vec<_> = data.into();
+                    Response::new(service, None, data, _cfg)?
+                }
+                Err(e) => {
+                    rsutil::warn!("{} failed to parse request data: {:?}", LOG_TAG_SERVER, e);
+                    Response::new_negative(service, Code::IncorrectMessageLengthOrInvalidFormat)
+                }
             }
         };
 

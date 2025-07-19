@@ -22,11 +22,13 @@ where
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
 
-        self.transmit_response(
-            Response::new_negative(service, Code::ServiceNotSupported),
-            true,
-        )
-        .await;
+        let resp = if self.session.get_session_type().await == Default::default() {
+            Response::new_negative(service, Code::ServiceNotSupportedInActiveSession)
+        } else {
+            Response::new_negative(service, Code::ServiceNotSupported)
+        };
+
+        self.transmit_response(resp, true).await;
 
         Ok(())
     }

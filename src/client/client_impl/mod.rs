@@ -54,7 +54,7 @@ where
     ) -> Self {
         Self {
             isotp: CanIsoTp::new(device, channel, addr, false).await,
-            context: Context::new(p2_offset, byte_order),
+            context: Context::new(byte_order, p2_offset),
         }
     }
 

@@ -1,4 +1,4 @@
-//! request of Service 22
+//! response of Service 22
 
 use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
 use iso14229_1::{
@@ -21,6 +21,8 @@ where
         _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
+
+        // Secured dataIdentifiers require a SecurityAccess service and therefore a non-default diagnostic session.
         let resp = match req.data::<ReadDID>(_cfg) {
             Ok(ctx) => {
                 let list = ctx.collect();
@@ -30,11 +32,20 @@ where
                     let mut data = Vec::with_capacity(list.len());
                     for did in list {
                         match self.context.get_static_did(&did).await {
-                            Some(val) => {
-                                let did_val: u16 = did.into();
-                                data.extend_from_slice(did_val.to_be_bytes().as_slice());
-                                data.extend_from_slice(val.as_ref());
-                            }
+                            Some(val) => match self.context.get_static_did_sa_level(&did) {
+                                Some(v) => {
+                                    if self.session.get_security_access_level().await == v {
+                                        let did_val: u16 = did.into();
+                                        data.extend_from_slice(did_val.to_be_bytes().as_slice());
+                                        data.extend_from_slice(val.as_ref());
+                                    }
+                                }
+                                None => {
+                                    let did_val: u16 = did.into();
+                                    data.extend_from_slice(did_val.to_be_bytes().as_slice());
+                                    data.extend_from_slice(val.as_ref());
+                                }
+                            },
                             None => {
                                 rsutil::warn!(
                                     "{} DID: {:?} is not configured",
@@ -50,7 +61,7 @@ where
                     if data.is_empty() {
                         Response::new_negative(service, Code::RequestOutOfRange)
                     } else {
-                        Response::try_from((service, data, _cfg))?
+                        Response::new(service, None, data, _cfg)?
                     }
                 }
             }

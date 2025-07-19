@@ -1,10 +1,11 @@
 //! response of Service 10
 
-use crate::{
-    constants::LOG_TAG_SERVER,
-    server::{util, DoCanServer},
+use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
+use iso14229_1::{
+    request::Request,
+    response::{Code, Response},
+    DidConfig, Iso14229Error, SessionType,
 };
-use iso14229_1::{request::Request, response::Response, DidConfig, Iso14229Error, SessionType};
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
 
@@ -21,7 +22,7 @@ where
         data: Vec<u8>,
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
-        let data = match req.sub_function() {
+        let resp = match req.sub_function() {
             Some(sf) => {
                 match sf.function::<SessionType>() {
                     Ok(r#type) => {
@@ -33,26 +34,23 @@ where
                         if sf.is_suppress_positive() {
                             None // suppress positive
                         } else {
-                            Some(util::positive_response(
-                                service,
-                                Some(r#type.into()),
-                                data,
-                                _cfg,
-                            ))
+                            Some(Response::new(service, Some(r#type.into()), data, _cfg)?)
                         }
                     }
                     Err(e) => {
-                        rsutil::warn!("{} Failed to parse sub-function: {:?}", LOG_TAG_SERVER, e);
-                        Some(util::sub_func_not_support(service))
+                        rsutil::warn!("{} failed to parse sub-function: {:?}", LOG_TAG_SERVER, e);
+                        Some(Response::new_negative(
+                            service,
+                            Code::IncorrectMessageLengthOrInvalidFormat,
+                        ))
                     }
                 }
             }
-            None => Some(util::invalid_format(service)),
+            None => Some(Response::new_negative(service, Code::GeneralReject)),
         };
 
-        if let Some(data) = data {
-            self.transmit_response(Response::try_from((&data, _cfg))?, true)
-                .await;
+        if let Some(resp) = resp {
+            self.transmit_response(resp, true).await;
         }
 
         Ok(())

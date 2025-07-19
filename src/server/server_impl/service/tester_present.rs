@@ -1,9 +1,7 @@
-//! request of Service 3E
+//! response of Service 3E
 
-use crate::{
-    constants::LOG_TAG_SERVER,
-    server::{util, DoCanServer},
-};
+use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
+use iso14229_1::response::Code;
 use iso14229_1::{
     request::Request, response::Response, DidConfig, Iso14229Error, TesterPresentType,
 };
@@ -22,35 +20,34 @@ where
         _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
-        let data = match req.sub_function() {
+        let resp = match req.sub_function() {
             Some(sf) => {
                 if sf.is_suppress_positive() {
                     None
                 } else {
                     match sf.function::<TesterPresentType>() {
-                        Ok(r#type) => Some(util::positive_response(
-                            service,
-                            Some(r#type.into()),
-                            vec![],
-                            _cfg,
-                        )),
+                        Ok(r#type) => {
+                            Some(Response::new(service, Some(r#type.into()), vec![], _cfg)?)
+                        }
                         Err(e) => {
                             rsutil::warn!(
                                 "{} Failed to parse sub-function: {:?}",
                                 LOG_TAG_SERVER,
                                 e
                             );
-                            Some(util::sub_func_not_support(service))
+                            Some(Response::new_negative(
+                                service,
+                                Code::SubFunctionNotSupported,
+                            ))
                         }
                     }
                 }
             }
-            None => Some(util::invalid_format(service)),
+            None => Some(Response::new_negative(service, Code::GeneralReject)),
         };
 
-        if let Some(data) = data {
-            self.transmit_response(Response::try_from((&data, _cfg))?, true)
-                .await;
+        if let Some(resp) = resp {
+            self.transmit_response(resp, true).await;
         }
 
         Ok(())

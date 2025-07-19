@@ -1,10 +1,10 @@
-//! request of Service 28
+//! response of Service 28
 
 use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
 use iso14229_1::{
-    request::{CommunicationCtrl, Request},
+    request::{self, Request},
     response::{Code, Response},
-    DidConfig, Iso14229Error,
+    CommunicationCtrlType, DidConfig, Iso14229Error,
 };
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
@@ -21,15 +21,63 @@ where
         _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
-        let resp = match req.data::<CommunicationCtrl>(_cfg) {
-            Ok(ctx) => Response::try_from((service, vec![ctx.comm_type.value()], _cfg))?,
-            Err(e) => {
-                rsutil::warn!("{} Failed to parse request data: {:?}", LOG_TAG_SERVER, e);
-                Response::new_negative(service, Code::GeneralReject)
+
+        let resp = if self.session.get_session_type().await == Default::default() {
+            Some(Response::new_negative(
+                service,
+                Code::ServiceNotSupportedInActiveSession,
+            ))
+        } else {
+            match req.sub_function() {
+                Some(sf) => match sf.function::<CommunicationCtrlType>() {
+                    Ok(r#type) => match req.data::<request::CommunicationCtrl>(_cfg) {
+                        Ok(_) => {
+                            if sf.is_suppress_positive() {
+                                None
+                            } else {
+                                Some(Response::new(service, Some(r#type.into()), vec![], _cfg)?)
+                            }
+                        }
+                        Err(e) => {
+                            rsutil::warn!(
+                                "{} can't parse data on service: {}, because of: {}",
+                                LOG_TAG_SERVER,
+                                service,
+                                e
+                            );
+                            Some(Response::new_negative(
+                                service,
+                                Code::IncorrectMessageLengthOrInvalidFormat,
+                            ))
+                        }
+                    },
+                    Err(e) => {
+                        rsutil::warn!(
+                            "{} can't parse sub-function on service: {}, because of: {}",
+                            LOG_TAG_SERVER,
+                            service,
+                            e
+                        );
+                        Some(Response::new_negative(
+                            service,
+                            Code::SubFunctionNotSupported,
+                        ))
+                    }
+                },
+                None => {
+                    rsutil::warn!(
+                        "{} can't get sub-function on service: {}",
+                        LOG_TAG_SERVER,
+                        service
+                    );
+                    Some(Response::new_negative(service, Code::GeneralReject))
+                }
             }
         };
 
-        self.transmit_response(resp, true).await;
+        if let Some(resp) = resp {
+            self.transmit_response(resp, true).await;
+        }
 
         Ok(())
     }

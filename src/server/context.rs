@@ -1,6 +1,9 @@
 use crate::{server::session::SessionManager, Config, DoCanError, SecurityAlgo};
 use bytes::{Bytes, BytesMut};
-use iso14229_1::{response::SessionTiming, DataIdentifier, DidConfig};
+use iso14229_1::{
+    request::ClearDiagnosticInfo, response::SessionTiming, DataIdentifier, DidConfig,
+    MemoryLocation,
+};
 use std::{collections::HashMap, sync::Arc};
 use tokio::{
     fs::read,
@@ -16,6 +19,7 @@ pub(crate) struct Context {
     pub(crate) did_dyn: Arc<Mutex<HashMap<DataIdentifier, Bytes>>>,
     pub(crate) sa_algo: Arc<Mutex<Option<SecurityAlgo>>>,
     pub(crate) sa_ctx: Arc<Mutex<Option<(u8, Bytes)>>>,
+    pub(crate) memories: Arc<Mutex<HashMap<MemoryLocation, Bytes>>>,
     pub(crate) session: SessionManager,
 }
 
@@ -33,6 +37,7 @@ impl Context {
             did_dyn: Default::default(),
             sa_algo: Default::default(),
             sa_ctx: Default::default(),
+            memories: Default::default(),
             session: Default::default(),
         })
     }
@@ -73,6 +78,11 @@ impl Context {
     #[inline(always)]
     pub async fn get_static_did(&self, did: &DataIdentifier) -> Option<Bytes> {
         self.did_get_util(self.did_st.lock().await, &did)
+    }
+
+    #[inline(always)]
+    pub fn get_static_did_sa_level(&self, did: &DataIdentifier) -> Option<u8> {
+        self.config.did_sa_level.get(did).cloned()
     }
 
     #[inline(always)]
@@ -136,5 +146,5 @@ impl Context {
         }
     }
 
-    pub(crate) async fn clear_diagnostic_info(&self) {}
+    pub(crate) async fn clear_diagnostic_info(&self, info: ClearDiagnosticInfo) {}
 }

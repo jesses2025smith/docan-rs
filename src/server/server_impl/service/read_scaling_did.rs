@@ -1,4 +1,4 @@
-//! request of Service 24
+//! response of Service 24
 
 use crate::server::DoCanServer;
 use iso14229_1::{
@@ -22,11 +22,9 @@ where
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
 
-        self.transmit_response(
-            Response::new_negative(service, Code::ServiceNotSupported),
-            true,
-        )
-        .await;
+        let resp = Response::new_negative(service, Code::ServiceNotSupported);
+
+        self.transmit_response(resp, true).await;
 
         Ok(())
     }

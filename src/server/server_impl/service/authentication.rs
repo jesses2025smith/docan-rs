@@ -1,4 +1,4 @@
-//! request of Service 29
+//! response of Service 29
 
 use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
 use iso14229_1::{
@@ -134,7 +134,10 @@ where
                                     service,
                                     e
                                 );
-                                Response::new_negative(service, Code::GeneralReject)
+                                Response::new_negative(
+                                    service,
+                                    Code::IncorrectMessageLengthOrInvalidFormat,
+                                )
                             }
                         }
                     }
