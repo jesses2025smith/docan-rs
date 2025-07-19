@@ -1,9 +1,8 @@
 //! response of Service 3E
 
 use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
-use iso14229_1::response::Code;
 use iso14229_1::{
-    request::Request, response::Response, DidConfig, Iso14229Error, TesterPresentType,
+    request::Request, response::{Code, Response}, DidConfig, Iso14229Error, TesterPresentType,
 };
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;

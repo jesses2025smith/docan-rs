@@ -1,10 +1,9 @@
 //! response of Service 85
 
 use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
-use iso14229_1::response::Code;
 use iso14229_1::{
     request::{self, Request},
-    response::Response,
+    response::{Code, Response},
     DTCSettingType, DidConfig, Iso14229Error,
 };
 use rs_can::{CanDevice, CanFrame};

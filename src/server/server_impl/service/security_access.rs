@@ -5,9 +5,8 @@ use crate::{
     server::{util, DoCanServer},
 };
 use bytes::Bytes;
-use iso14229_1::response::Code;
 use iso14229_1::{
-    request::Request, response::Response, DidConfig, Iso14229Error, SecurityAccessLevel,
+    request::Request, response::{Code, Response}, DidConfig, Iso14229Error, SecurityAccessLevel,
 };
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
