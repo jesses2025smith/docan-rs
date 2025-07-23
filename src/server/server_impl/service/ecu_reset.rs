@@ -1,18 +1,19 @@
 //! response of Service 11
 
-use crate::{
-    constants::LOG_TAG_SERVER,
-    server::{util, DoCanServer},
+use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
+use iso14229_1::{
+    request::Request,
+    response::{Code, Response},
+    DidConfig, ECUResetType, Iso14229Error,
 };
-use iso14229_1::{request::Request, response::Response, DidConfig, ECUResetType, Iso14229Error};
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
 
 impl<D, C, F> DoCanServer<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Clone + Eq + Display + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     pub(crate) async fn ecu_reset(
         &self,
@@ -20,7 +21,7 @@ where
         _cfg: &DidConfig,
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
-        let data = match req.sub_function() {
+        let resp = match req.sub_function() {
             Some(sf) => {
                 match sf.function::<ECUResetType>() {
                     Ok(r#type) => {
@@ -32,26 +33,26 @@ where
                                 ECUResetType::EnableRapidPowerShutDown => vec![1],
                                 _ => vec![],
                             };
-                            Some(util::positive_response(
-                                service,
-                                Some(r#type.into()),
-                                data,
-                                _cfg,
-                            ))
+                            Some(Response::new(service, Some(r#type.into()), data, _cfg)?)
                         }
                     }
                     Err(e) => {
                         rsutil::warn!("{} Failed to parse sub-function: {:?}", LOG_TAG_SERVER, e);
-                        Some(util::sub_func_not_support(service))
+                        Some(Response::new_negative(
+                            service,
+                            Code::SubFunctionNotSupported,
+                        ))
                     }
                 }
             }
-            None => Some(util::invalid_format(service)),
+            None => Some(Response::new_negative(
+                service,
+                Code::IncorrectMessageLengthOrInvalidFormat,
+            )),
         };
 
-        if let Some(data) = data {
-            self.transmit_response(Response::try_from((&data, _cfg))?, true)
-                .await;
+        if let Some(resp) = resp {
+            self.transmit_response(resp, true).await;
         }
 
         Ok(())

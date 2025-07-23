@@ -1,4 +1,4 @@
-//! request of Service 29
+//! response of Service 29
 
 use crate::{constants::LOG_TAG_SERVER, server::DoCanServer};
 use iso14229_1::{
@@ -11,9 +11,9 @@ use std::fmt::Display;
 
 impl<D, C, F> DoCanServer<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Clone + Eq + Display + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     pub(crate) async fn authentication(
         &self,
@@ -134,7 +134,10 @@ where
                                     service,
                                     e
                                 );
-                                Response::new_negative(service, Code::GeneralReject)
+                                Response::new_negative(
+                                    service,
+                                    Code::IncorrectMessageLengthOrInvalidFormat,
+                                )
                             }
                         }
                     }

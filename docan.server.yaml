@@ -7,7 +7,9 @@ timing:
   p2_star: 5000
 extend_sa_level: 3
 program_sa_level: 5
+seed_len: 4
 sa_salt: [0x01, 0x02, 0x03, 0x04]
 did_cfg:
   0xF190: 17
+did_sa_level:
 byte_order: little

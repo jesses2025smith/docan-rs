@@ -6,7 +6,10 @@ use iso14229_1::{
     response::{Code, Response},
     DidConfig, Service, TesterPresentType, SUPPRESS_POSITIVE,
 };
-use iso15765_2::{Address, AddressType, CanIsoTp, IsoTp, IsoTpError};
+use iso15765_2::{
+    can::{Address, AddressType, CanIsoTp},
+    IsoTp, IsoTpError,
+};
 use rs_can::{CanDevice, CanFrame};
 use rsutil::types::ByteOrder;
 use std::{fmt::Display, hash::Hash};
@@ -14,25 +17,25 @@ use std::{fmt::Display, hash::Hash};
 #[derive(Clone)]
 pub struct DoCanClient<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
-    C: Display + Clone + Hash + Eq + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + 'static,
+    C: Display + Clone + Hash + Eq + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     isotp: CanIsoTp<D, C, F>,
     context: Context,
 }
 unsafe impl<D, C, F> Send for DoCanClient<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
-    C: Display + Clone + Hash + Eq + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + 'static,
+    C: Display + Clone + Hash + Eq + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
 }
 unsafe impl<D, C, F> Sync for DoCanClient<D, C, F>
 where
     D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
-    C: Display + Clone + Hash + Eq + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Send + Display + 'static,
+    C: Display + Clone + Hash + Eq + Send + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
 }
 
@@ -40,7 +43,7 @@ impl<D, C, F> DoCanClient<D, C, F>
 where
     D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Display + Clone + Hash + Eq + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Send + Display + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     pub async fn new(
         device: D,
@@ -51,7 +54,7 @@ where
     ) -> Self {
         Self {
             isotp: CanIsoTp::new(device, channel, addr, false).await,
-            context: Context::new(p2_offset, byte_order),
+            context: Context::new(byte_order, p2_offset),
         }
     }
 

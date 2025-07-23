@@ -10,7 +10,10 @@ use iso14229_1::{
     response::{Code, Response},
     Iso14229Error, Service,
 };
-use iso15765_2::{Address, AddressType, CanIsoTp, IsoTp, IsoTpError};
+use iso15765_2::{
+    can::{Address, AddressType, CanIsoTp},
+    IsoTp, IsoTpError,
+};
 use rs_can::{CanDevice, CanFrame};
 use std::{fmt::Display, sync::Arc};
 use tokio::{spawn, task::JoinHandle};
@@ -25,9 +28,9 @@ pub struct DoCanServer<D, C, F> {
 
 impl<D, C, F> DoCanServer<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Clone + Eq + Display + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     pub async fn new(device: D, channel: C) -> Result<Self, DoCanError> {
         let context = context::Context::new().await?;
@@ -217,9 +220,9 @@ where
 #[async_trait::async_trait]
 impl<D, C, F> Server for DoCanServer<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Clone + Eq + Display + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     #[inline(always)]
     async fn update_address(&self, address: Address) {
@@ -231,8 +234,8 @@ where
         self.context.set_security_algo(algo).await;
     }
 
-    async fn service_forever(&mut self, interval: u64) {
-        self.isotp.start(interval).await;
+    async fn service_forever(&mut self, interval_us: u64) {
+        self.isotp.start(interval_us).await;
         let mut clone = self.clone();
         let session = self.session.clone();
         let handle = spawn(async move { session.work().await });

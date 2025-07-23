@@ -9,18 +9,18 @@ pub(crate) struct Context {
     timing: Arc<Mutex<SessionTiming>>,
     did: Arc<Mutex<DidConfig>>,
     security_algo: Arc<Mutex<Option<SecurityAlgo>>>,
-    pub(crate) p2_offset: u64,
     pub(crate) byte_order: ByteOrder,
+    pub(crate) p2_offset: u64,
 }
 
 impl Context {
-    pub fn new(p2_offset: Option<u16>, byte_order: ByteOrder) -> Self {
+    pub fn new(byte_order: ByteOrder, p2_offset: Option<u16>) -> Self {
         Self {
             timing: Default::default(),
-            p2_offset: p2_offset.unwrap_or_default() as u64,
             did: Default::default(),
             security_algo: Default::default(),
             byte_order,
+            p2_offset: p2_offset.unwrap_or_default() as u64,
         }
     }
 

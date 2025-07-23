@@ -1,4 +1,4 @@
-//! request of Service 2C
+//! response of Service 2C
 
 use crate::server::DoCanServer;
 use iso14229_1::{
@@ -11,9 +11,9 @@ use std::fmt::Display;
 
 impl<D, C, F> DoCanServer<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Clone + Eq + Display + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     pub(crate) async fn dynamically_define_did(
         &self,
@@ -22,11 +22,9 @@ where
     ) -> Result<(), Iso14229Error> {
         let service = req.service();
 
-        self.transmit_response(
-            Response::new_negative(service, Code::ServiceNotSupported),
-            true,
-        )
-        .await;
+        let resp = Response::new_negative(service, Code::ServiceNotSupported);
+
+        self.transmit_response(resp, true).await;
 
         Ok(())
     }

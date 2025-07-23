@@ -5,18 +5,17 @@ use crate::{
     server::{util, DoCanServer},
 };
 use bytes::Bytes;
-use iso14229_1::response::Code;
 use iso14229_1::{
-    request::Request, response::Response, DidConfig, Iso14229Error, SecurityAccessLevel,
+    request::Request, response::{Code, Response}, DidConfig, Iso14229Error, SecurityAccessLevel,
 };
 use rs_can::{CanDevice, CanFrame};
 use std::fmt::Display;
 
 impl<D, C, F> DoCanServer<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Clone + Eq + Display + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     pub(crate) async fn security_access(
         &self,
@@ -29,7 +28,7 @@ where
                 Ok(v) => {
                     let mut guard = self.context.sa_ctx.lock().await;
                     if v.is_request_seed() {
-                        let data = util::gen_seed(4);
+                        let data = util::gen_seed(self.context.config.seed_len);
                         let resp = Response::new(service, Some(v.into()), &data, _cfg)?;
                         let _ = guard.replace((v.into(), Bytes::from(data)));
 

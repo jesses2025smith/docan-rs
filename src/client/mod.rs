@@ -5,7 +5,7 @@ pub use client_impl::*;
 
 use crate::{DoCanError, SecurityAlgo};
 use iso14229_1::{request, response, *};
-use iso15765_2::{Address, AddressType};
+use iso15765_2::can::{Address, AddressType};
 use rs_can::CanResult;
 
 #[async_trait::async_trait]

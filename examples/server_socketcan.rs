@@ -10,24 +10,21 @@ async fn main() -> anyhow::Result<()> {
     builder.add_config(iface.clone(), Default::default());
 
     let mut device = builder.build::<SocketCan>()?;
-    let mut server = DoCanServer::new(
-        device.clone(),
-        iface.clone(),
-    )
-    .await?;
+    let mut server = DoCanServer::new(device.clone(), iface.clone()).await?;
 
     server.service_forever(100).await;
 
     match ctrl_c().await {
         Ok(()) => {
             println!("\nCtrl+C Signal, exiting...");
-            server.service_stop().await;
-            device.shutdown();
         }
         Err(err) => {
             eprintln!("Ctrl+C error: {:?}", err);
         }
     }
+
+    server.service_stop().await;
+    device.shutdown();
 
     Ok(())
 }

@@ -5,13 +5,15 @@
 
 ## Overview
 
-DoCAN(Diagnostic Communication over Controller Area Network) is a specialized protocol used primarily in automotive and industrial settings.
+DoCAN(Diagnostic Communication over Controller Area Network) 
+is a specialized protocol used primarily in automotive and industrial settings.
 
 The driver must implement the CanDriver trait defined in [`rs-can`](https://crates.io/crates/rs-can).
 
 ##### [The Server example](examples)
-A server configuration file named `docan.server.yaml` needs to be added under the executable file.
-[Example file](docan.server.yaml)
+A server configuration file named [docan.server.yaml](docan.server.yaml) 
+needs to be added in the same directory as the executable.
+
 ```rust
 use docan_rs::{DoCanServer, Server};
 use rs_can::{CanDevice, DeviceBuilder};
@@ -25,11 +27,7 @@ async fn main() -> anyhow::Result<()> {
     builder.add_config(iface.clone(), Default::default());
 
     let mut device = builder.build::<SocketCan>()?;
-    let mut server = DoCanServer::new(
-        device.clone(),
-        iface.clone(),
-    )
-    .await?;
+    let mut server = DoCanServer::new(device.clone(), iface.clone()).await?;
 
     server.service_forever(100).await;
 
@@ -52,7 +50,10 @@ async fn main() -> anyhow::Result<()> {
 ```rust
 use docan_rs::{Client, DoCanClient};
 use iso14229_1::{DataIdentifier, SessionType};
-use iso15765_2::{Address, AddressType, IsoTp};
+use iso15765_2::{
+    can::{Address, AddressType},
+    IsoTp,
+};
 use rs_can::{CanDevice, DeviceBuilder};
 use rsutil::types::ByteOrder;
 use socketcan_rs::SocketCan;
@@ -105,7 +106,7 @@ async fn main() -> anyhow::Result<()> {
         .await?
         .data;
     assert_eq!(data.did, DataIdentifier::VIN);
-    assert_eq!(data.data, vin);
+    assert_eq!(data.data, "ABCDEF1234567890I");
 
     Ok(())
 }
