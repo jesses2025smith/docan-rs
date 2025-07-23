@@ -19,6 +19,7 @@ pub(crate) struct Context {
     pub(crate) did_dyn: Arc<Mutex<HashMap<DataIdentifier, Bytes>>>,
     pub(crate) sa_algo: Arc<Mutex<Option<SecurityAlgo>>>,
     pub(crate) sa_ctx: Arc<Mutex<Option<(u8, Bytes)>>>,
+    #[allow(dead_code)]
     pub(crate) memories: Arc<Mutex<HashMap<MemoryLocation, Bytes>>>,
     pub(crate) session: SessionManager,
 }
@@ -85,6 +86,7 @@ impl Context {
         self.config.did_sa_level.get(did).cloned()
     }
 
+    #[allow(unused)]
     #[inline(always)]
     pub async fn set_dynamic_did<T: AsRef<[u8]>>(&mut self, did: &DataIdentifier, data: T) -> bool {
         match self.config.did_cfg.get(did) {
@@ -104,6 +106,7 @@ impl Context {
         }
     }
 
+    #[allow(unused)]
     #[inline(always)]
     pub async fn get_dynamic_did(&self, did: &DataIdentifier) -> Option<Bytes> {
         self.did_get_util(self.did_dyn.lock().await, &did)
@@ -146,5 +149,6 @@ impl Context {
         }
     }
 
+    #[allow(unused)]
     pub(crate) async fn clear_diagnostic_info(&self, info: ClearDiagnosticInfo) {}
 }

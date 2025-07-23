@@ -17,25 +17,25 @@ use std::{fmt::Display, hash::Hash};
 #[derive(Clone)]
 pub struct DoCanClient<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
-    C: Display + Clone + Hash + Eq + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + 'static,
+    C: Display + Clone + Hash + Eq + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     isotp: CanIsoTp<D, C, F>,
     context: Context,
 }
 unsafe impl<D, C, F> Send for DoCanClient<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
-    C: Display + Clone + Hash + Eq + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + 'static,
+    C: Display + Clone + Hash + Eq + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
 }
 unsafe impl<D, C, F> Sync for DoCanClient<D, C, F>
 where
     D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
-    C: Display + Clone + Hash + Eq + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Send + Display + 'static,
+    C: Display + Clone + Hash + Eq + Send + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
 }
 
@@ -43,7 +43,7 @@ impl<D, C, F> DoCanClient<D, C, F>
 where
     D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Display + Clone + Hash + Eq + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Send + Display + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     pub async fn new(
         device: D,

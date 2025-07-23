@@ -30,6 +30,7 @@ where
     Ok(res)
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub(crate) address: Address,

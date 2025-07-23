@@ -28,9 +28,9 @@ pub struct DoCanServer<D, C, F> {
 
 impl<D, C, F> DoCanServer<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Clone + Eq + Display + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     pub async fn new(device: D, channel: C) -> Result<Self, DoCanError> {
         let context = context::Context::new().await?;
@@ -220,9 +220,9 @@ where
 #[async_trait::async_trait]
 impl<D, C, F> Server for DoCanServer<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Clone + Eq + Display + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     #[inline(always)]
     async fn update_address(&self, address: Address) {

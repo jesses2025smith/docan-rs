@@ -17,9 +17,9 @@ use tokio::time::sleep;
 #[async_trait::async_trait]
 impl<D, C, F> Client for DoCanClient<D, C, F>
 where
-    D: CanDevice<Channel = C, Frame = F> + Clone + Send + Sync + 'static,
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
     C: Display + Clone + Hash + Eq + Send + Sync + 'static,
-    F: CanFrame<Channel = C> + Clone + Display + Send + Sync + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
 {
     async fn update_address(&self, address: Address) {
         self.isotp.update_address(address).await;
