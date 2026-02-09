@@ -49,7 +49,7 @@ version = "0.1.0-b4"
 default-features = false
 
 [dependencies.rand]
-version = "0.9"
+version = "0.10"
 optional = true
 
 [dependencies.serde]
