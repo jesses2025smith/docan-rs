@@ -1,190 +1,251 @@
-mod client_impl;
 mod context;
+mod service;
 
-pub use client_impl::*;
+use crate::{constants::LOG_TAG_CLIENT, error::DoCanError, SecurityAlgo};
+use iso14229_1::{
+    request::Request,
+    response::{Code, Response},
+    Configuration, DataIdentifier, Service, TesterPresentType, SUPPRESS_POSITIVE,
+};
+use iso15765_2::{
+    can::{Address, AddressType, CanIsoTp},
+    IsoTp, IsoTpError,
+};
+use rs_can::{CanDevice, CanFrame};
+use rsutil::types::ByteOrder;
+use std::{fmt::Display, hash::Hash};
 
-use crate::{DoCanError, SecurityAlgo};
-use iso14229_1::{request, response, *};
-use iso15765_2::can::{Address, AddressType};
-use rs_can::CanResult;
+#[derive(Clone)]
+pub struct DoCanClient<D, C, F>
+where
+    D: CanDevice<Channel = C, Frame = F> + Clone + 'static,
+    C: Display + Clone + Hash + Eq + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
+{
+    isotp: CanIsoTp<D, C, F>,
+    context: context::Context,
+}
 
-#[async_trait::async_trait]
-pub trait Client {
-    async fn update_address(&self, address: Address);
-    async fn update_security_algo(&self, algo: SecurityAlgo);
-    async fn add_data_identifier(&self, did: DataIdentifier, length: usize);
-    async fn remove_data_identifier(&self, did: DataIdentifier);
-    // async fn set_address_of_byte_order(
-    //     &mut self,
-    //     bo: ByteOrder,
-    // ) -> CanResult<(), DoCanError>;
-    // async fn set_memory_size_of_byte_order(
-    //     &mut self,
-    //     bo: ByteOrder,
-    // ) -> CanResult<(), DoCanError>;
-    /** - Diagnostic and communication management functional unit - **/
-    async fn session_ctrl(
-        &mut self,
-        r#type: SessionType,
-        suppress_positive: bool,
+impl<D, C, F> DoCanClient<D, C, F>
+where
+    D: CanDevice<Channel = C, Frame = F> + Clone + Send + 'static,
+    C: Display + Clone + Hash + Eq + Send + Sync + 'static,
+    F: CanFrame<Channel = C> + Clone + Display + 'static,
+{
+    pub async fn new(
+        device: D,
+        channel: C,
+        addr: Address,
+        byte_order: ByteOrder,
+        p2_offset: Option<u16>,
+    ) -> Self {
+        Self {
+            isotp: CanIsoTp::new(device, channel, addr, false).await,
+            context: context::Context::new(byte_order, p2_offset),
+        }
+    }
+
+    #[inline(always)]
+    pub fn tp_layer(&mut self) -> &mut CanIsoTp<D, C, F> {
+        &mut self.isotp
+    }
+
+    #[inline(always)]
+    pub fn byte_order(&self) -> ByteOrder {
+        self.context.byte_order
+    }
+
+    #[inline(always)]
+    pub async fn update_address(&self, address: Address) {
+        self.isotp.update_address(address).await;
+    }
+
+    #[inline(always)]
+    pub async fn update_security_algo(&self, algo: SecurityAlgo) {
+        self.context.set_security_algo(algo).await;
+    }
+
+    #[inline(always)]
+    pub async fn add_data_identifier(&self, did: DataIdentifier, length: usize) {
+        self.context.add_did(did, length).await;
+    }
+
+    #[inline(always)]
+    pub async fn remove_data_identifier(&self, did: DataIdentifier) {
+        self.context.remove_did(&did).await;
+    }
+
+    #[inline(always)]
+    fn make_request<T: Into<Vec<u8>>>(
+        service: Service,
+        sub_func: Option<u8>,
+        data: T,
+        cfg: &Configuration,
+    ) -> Result<Request, DoCanError> {
+        Request::new::<Vec<_>>(service, sub_func, data.into(), cfg)
+            .map_err(DoCanError::Iso14229Error)
+    }
+
+    #[inline(always)]
+    async fn send_and_parse<T>(
+        &self,
         addr_type: AddressType,
-    ) -> CanResult<(), DoCanError>;
-    async fn ecu_reset(
-        &mut self,
-        r#type: ECUResetType,
-        suppress_positive: bool,
+        request: Request,
+        sub_check: Option<(u8, Service)>,
+        cfg: &Configuration,
+    ) -> Result<T, DoCanError>
+    where
+        T: iso14229_1::ResponseData,
+    {
+        let response = self
+            .send_and_response(addr_type, request, sub_check, cfg)
+            .await?;
+        response.data::<T>(cfg).map_err(DoCanError::Iso14229Error)
+    }
+
+    fn response_service_check(response: &Response, target: Service) -> Result<bool, DoCanError> {
+        let service = response.service();
+        if response.is_negative() {
+            let nrc_code = response.nrc_code().map_err(DoCanError::Iso14229Error)?;
+            match nrc_code {
+                Code::RequestCorrectlyReceivedResponsePending => Ok(true),
+                _ => Err(DoCanError::NRCError {
+                    service,
+                    code: nrc_code,
+                }),
+            }
+        } else if service != target {
+            Err(DoCanError::UnexpectedResponse {
+                expect: target,
+                actual: service,
+            })
+        } else {
+            Ok(false)
+        }
+    }
+
+    #[inline(always)]
+    async fn suppress_positive_sr(
+        &self,
         addr_type: AddressType,
-    ) -> CanResult<(), DoCanError>;
-    async fn security_access(
-        &mut self,
-        level: u8,
-        params: Vec<u8>,
-    ) -> CanResult<Vec<u8>, DoCanError>;
-    async fn unlock_security_access(
-        &mut self,
-        level: u8,
-        params: Vec<u8>,
-        salt: Vec<u8>,
-    ) -> CanResult<(), DoCanError>;
-    async fn communication_control(
-        &mut self,
-        ctrl_type: CommunicationCtrlType,
-        comm_type: CommunicationType,
-        node_id: Option<request::NodeId>,
+        request: Request,
         suppress_positive: bool,
+        sub_check: Option<(u8, Service)>,
+        cfg: &Configuration,
+    ) -> Result<Option<Response>, DoCanError> {
+        match self.send_and_response(addr_type, request, None, cfg).await {
+            Ok(r) => {
+                if let Some((source, service)) = sub_check {
+                    Self::sub_func_check(&r, source, service)?;
+                }
+
+                Ok(Some(r))
+            }
+            Err(e) => match e {
+                DoCanError::IsoTpError(e) => match e {
+                    IsoTpError::Timeout { .. } => {
+                        if suppress_positive {
+                            Ok(None)
+                        } else {
+                            Err(DoCanError::IsoTpError(e))
+                        }
+                    }
+                    _ => Err(DoCanError::IsoTpError(e)),
+                },
+                _ => Err(e),
+            },
+        }
+    }
+
+    async fn send_and_response(
+        &self,
         addr_type: AddressType,
-    ) -> CanResult<(), DoCanError>;
-    #[cfg(feature = "std2020")]
-    async fn authentication(
-        &mut self,
-        auth_task: AuthenticationTask,
-        data: request::Authentication,
-    ) -> CanResult<response::Authentication, DoCanError>;
-    async fn tester_present(
-        &mut self,
-        r#type: TesterPresentType,
+        request: Request,
+        sub_check: Option<(u8, Service)>,
+        cfg: &Configuration,
+    ) -> Result<Response, DoCanError> {
+        let service = request.service();
+        let data: Vec<_> = request.into();
+        let timing = self.context.get_session_timing().await;
+        let p2_offset = self.context.p2_offset;
+        let _ = &self
+            .isotp
+            .transmit(addr_type, data)
+            .await
+            .map_err(DoCanError::IsoTpError)?;
+
+        let data = &self
+            .isotp
+            .wait_data(timing.p2_ms() + p2_offset)
+            .await
+            .map_err(DoCanError::IsoTpError)?;
+        let mut response = Response::try_from((data, cfg)).map_err(DoCanError::Iso14229Error)?;
+        while Self::response_service_check(&response, service)? {
+            rsutil::debug!(
+                "{} tester present when {:?}",
+                LOG_TAG_CLIENT,
+                Code::RequestCorrectlyReceivedResponsePending
+            );
+            let (_, request) =
+                Self::tester_present_request(TesterPresentType::Zero, true, cfg).await?;
+            let data: Vec<_> = request.into();
+            let _ = &self
+                .isotp
+                .transmit(addr_type, data)
+                .await
+                .map_err(DoCanError::IsoTpError)?;
+
+            let data = &self
+                .isotp
+                .wait_data(timing.p2_star_ms())
+                .await
+                .map_err(DoCanError::IsoTpError)?;
+
+            response = Response::try_from((data, cfg)).map_err(DoCanError::Iso14229Error)?;
+        }
+
+        if let Some((source, service)) = sub_check {
+            Self::sub_func_check(&response, source, service)?;
+        }
+
+        Ok(response)
+    }
+
+    fn sub_func_check(response: &Response, source: u8, service: Service) -> Result<(), DoCanError> {
+        match response.sub_function() {
+            Some(v) => {
+                // let source: u8 = session_type.into();
+                let target = v.origin();
+                if target != source {
+                    Err(DoCanError::UnexpectedSubFunction {
+                        service,
+                        expect: source,
+                        actual: target,
+                    })
+                } else {
+                    Ok(())
+                }
+            }
+            None => Err(DoCanError::OtherError(format!(
+                "response of service `{}` got an empty sub-function",
+                service
+            ))),
+        }
+    }
+
+    #[inline(always)]
+    async fn tester_present_request(
+        test_type: TesterPresentType,
         suppress_positive: bool,
-        addr_type: AddressType,
-    ) -> CanResult<(), DoCanError>;
-    #[cfg(any(feature = "std2006", feature = "std2013"))]
-    async fn access_timing_parameter(
-        &mut self,
-        r#type: TimingParameterAccessType,
-        parameter: Vec<u8>,
-        suppress_positive: bool,
-    ) -> CanResult<Option<response::AccessTimingParameter>, DoCanError>;
-    async fn secured_data_transmit(
-        &mut self,
-        apar: AdministrativeParameter,
-        signature: SignatureEncryptionCalculation,
-        anti_replay_cnt: u16,
-        service: u8,
-        service_data: Vec<u8>,
-        signature_data: Vec<u8>,
-    ) -> CanResult<response::SecuredDataTrans, DoCanError>;
-    async fn control_dtc_setting(
-        &mut self,
-        r#type: DTCSettingType,
-        parameter: Vec<u8>,
-        suppress_positive: bool,
-    ) -> CanResult<(), DoCanError>;
-    async fn response_on_event(&mut self) -> CanResult<(), DoCanError>;
-    async fn link_control(
-        &mut self,
-        r#type: LinkCtrlType,
-        data: request::LinkCtrl,
-        suppress_positive: bool,
-    ) -> CanResult<(), DoCanError>;
-    async fn read_data_by_identifier(
-        &mut self,
-        did: DataIdentifier,
-        others: Vec<DataIdentifier>,
-    ) -> CanResult<response::ReadDID, DoCanError>;
-    async fn read_memory_by_address(
-        &mut self,
-        mem_loc: MemoryLocation,
-    ) -> CanResult<Vec<u8>, DoCanError>;
-    async fn read_scaling_data_by_identifier(
-        &mut self,
-        did: DataIdentifier,
-    ) -> CanResult<response::ReadScalingDID, DoCanError>;
-    /** - Data transmission functional unit - **/
-    async fn read_data_by_period_identifier(
-        &mut self,
-        mode: request::TransmissionMode,
-        did: Vec<u8>,
-    ) -> CanResult<response::ReadDataByPeriodId, DoCanError>;
-    async fn dynamically_define_data_by_identifier(
-        &mut self,
-        r#type: DefinitionType,
-        data: request::DynamicallyDefineDID,
-        suppress_positive: bool,
-    ) -> CanResult<Option<response::DynamicallyDefineDID>, DoCanError>;
-    async fn write_data_by_identifier(
-        &mut self,
-        did: DataIdentifier,
-        data: Vec<u8>,
-    ) -> CanResult<(), DoCanError>;
-    async fn write_memory_by_address(
-        &mut self,
-        alfi: AddressAndLengthFormatIdentifier,
-        mem_addr: u128,
-        mem_size: u128,
-        record: Vec<u8>,
-    ) -> CanResult<response::WriteMemByAddr, DoCanError>;
-    /** Stored data transmission functional unit - **/
-    async fn clear_dtc_info(
-        &mut self,
-        group: utils::U24,
-        #[cfg(any(feature = "std2020"))] mem_sel: Option<u8>,
-        addr_type: AddressType,
-    ) -> CanResult<(), DoCanError>;
-    async fn read_dtc_info(
-        &mut self,
-        r#type: DTCReportType,
-        data: request::DTCInfo,
-    ) -> CanResult<response::DTCInfo, DoCanError>;
-    /** - InputOutput control functional unit - **/
-    async fn io_control(
-        &mut self,
-        did: DataIdentifier,
-        param: IOCtrlParameter,
-        state: Vec<u8>,
-        mask: Vec<u8>,
-    ) -> CanResult<response::IOCtrl, DoCanError>;
-    /** - Remote activation of routine functional unit - **/
-    async fn routine_control(
-        &mut self,
-        r#type: RoutineCtrlType,
-        routine_id: u16,
-        option_record: Vec<u8>,
-    ) -> CanResult<response::RoutineCtrl, DoCanError>;
-    /** - Upload download functional unit - **/
-    async fn request_download(
-        &mut self,
-        alfi: AddressAndLengthFormatIdentifier,
-        mem_addr: u128,
-        mem_size: u128,
-        dfi: Option<DataFormatIdentifier>,
-    ) -> CanResult<response::RequestDownload, DoCanError>;
-    async fn request_upload(
-        &mut self,
-        alfi: AddressAndLengthFormatIdentifier,
-        mem_addr: u128,
-        mem_size: u128,
-        dfi: Option<DataFormatIdentifier>,
-    ) -> CanResult<response::RequestUpload, DoCanError>;
-    async fn transfer_data(
-        &mut self,
-        sequence: u8,
-        data: Vec<u8>,
-    ) -> CanResult<response::TransferData, DoCanError>;
-    async fn request_transfer_exit(&mut self, parameter: Vec<u8>)
-        -> CanResult<Vec<u8>, DoCanError>;
-    #[cfg(any(feature = "std2013", feature = "std2020"))]
-    async fn request_file_transfer(
-        &mut self,
-        operation: ModeOfOperation,
-        data: request::RequestFileTransfer,
-    ) -> CanResult<response::RequestFileTransfer, DoCanError>;
+        cfg: &Configuration,
+    ) -> Result<(Service, Request), DoCanError> {
+        let service = Service::TesterPresent;
+        let mut sub_func = test_type.into();
+        if suppress_positive {
+            sub_func |= SUPPRESS_POSITIVE;
+        }
+        let request = Self::make_request(service, Some(sub_func), vec![], cfg)?;
+
+        Ok((service, request))
+    }
 }

@@ -15,6 +15,7 @@ pub(crate) struct SessionManager {
     /// Keep Duration
     pub(crate) duration: Duration,
     pub(crate) sa_level: Arc<Mutex<u8>>,
+    pub(crate) link_ctrl_verified: Arc<Mutex<bool>>,
 }
 
 impl SessionManager {
@@ -28,12 +29,21 @@ impl SessionManager {
     pub async fn reset(&self) {
         self.change(Default::default()).await;
         let _ = self.start.lock().await.take();
+        self.set_security_access_level(Default::default()).await;
     }
 
     /// change session type
     #[inline(always)]
     pub async fn change(&self, r#type: SessionType) {
-        *self.r#type.lock().await = r#type;
+        let mut guard = self.r#type.lock().await;
+        if *guard != r#type {
+            self.set_security_access_level(Default::default()).await;
+            self.clear_link_control_verify().await;
+            if r#type == Default::default() {
+                let _ = self.start.lock().await.take();
+            }
+        }
+        *guard = r#type;
     }
     /// Keep session or start non-default session manager
     #[inline(always)]
@@ -43,7 +53,7 @@ impl SessionManager {
     /// get current session type
     #[inline(always)]
     pub async fn set_session_type(&self, r#type: SessionType) {
-        *self.r#type.lock().await = r#type;
+        self.change(r#type).await;
     }
     /// get current session type
     #[inline(always)]
@@ -57,6 +67,21 @@ impl SessionManager {
     #[inline(always)]
     pub async fn get_security_access_level(&self) -> u8 {
         self.sa_level.lock().await.clone()
+    }
+    #[inline(always)]
+    pub async fn arm_link_control_verify(&self) {
+        *self.link_ctrl_verified.lock().await = true;
+    }
+    #[inline(always)]
+    pub async fn clear_link_control_verify(&self) {
+        *self.link_ctrl_verified.lock().await = false;
+    }
+    #[inline(always)]
+    pub async fn consume_link_control_verify(&self) -> bool {
+        let mut guard = self.link_ctrl_verified.lock().await;
+        let verified = *guard;
+        *guard = false;
+        verified
     }
     /// enable task
     pub async fn work(&self) {
