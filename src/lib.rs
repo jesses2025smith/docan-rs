@@ -12,6 +12,7 @@ mod server;
 #[cfg(feature = "server")]
 pub use server::*;
 
+pub type DoCanResult<R> = Result<R, DoCanError>;
 /// SecurityAlgo
 ///
 /// # Params
@@ -27,4 +28,4 @@ pub use server::*;
 /// if all seed is 0x00, return None
 /// else all seed is not 0xFF return algo data,
 /// otherwise return Error
-pub type SecurityAlgo = fn(u8, &[u8], &[u8]) -> Result<Option<Vec<u8>>, DoCanError>;
+pub type SecurityAlgo = fn(u8, &[u8], &[u8]) -> DoCanResult<Option<Vec<u8>>>;

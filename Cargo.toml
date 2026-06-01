@@ -1,6 +1,6 @@
 [package]
 name = "docan"
-version = "0.1.0-b4"
+version = "0.1.0"
 edition = "2021"
 license = "MIT OR LGPL-3.0"
 authors = ["Jesse Smith <jesses2025smith@gmail.com>"]
@@ -29,23 +29,21 @@ name = "docan_rs"
 
 [dependencies]
 async-trait = "0.1"
-bytes = "1.10"
+bytes = "1.11"
 hex = "0.4"
 log = "0.4"
-rs-can = { version = "0.3" }
+rs-can = "0.4"
 rsutil = { version = "0.1", features = ["log", "types"] }
 thiserror = "2"
 tokio = { version = "1", features = ["time", "fs"] }
 
 [dependencies.iso14229-1]
-#path = "../iso-std-rs/iso14229-1"
-version = "0.1.0-b4"
+version = "0.1.0"
 default-features = false
 optional = true
 
 [dependencies.iso15765-2 ]
-#path = "../iso-std-rs/iso15765-2"
-version = "0.1.0-b4"
+version = "0.1.0"
 default-features = false
 
 [dependencies.rand]
@@ -63,7 +61,9 @@ optional = true
 [dev-dependencies]
 anyhow = "1"
 futures = "0.3"
+rsutil = { version = "0.1", features = ["log4rs"] }
 scopeguard = "1.2"
-socketcan-rs = { version = "0.3" }
-tokio = { version = "1.46", features = ["macros", "rt-multi-thread", "signal"] }
+socketcan-rs = "0.4"
+tokio = { version = "1.52", features = ["macros", "rt-multi-thread", "signal"] }
 tokio-stream = "0.1"
+zlgcan = "0.4"

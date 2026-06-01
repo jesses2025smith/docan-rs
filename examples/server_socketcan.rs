@@ -1,16 +1,27 @@
 use docan_rs::{DoCanServer, Server};
 use rs_can::{CanDevice, DeviceBuilder};
 use socketcan_rs::SocketCan;
+use std::env;
 use tokio::signal::ctrl_c;
+
+fn security_algo(_: u8, seed: &[u8], salt: &[u8]) -> docan_rs::DoCanResult<Option<Vec<u8>>> {
+    Ok(Some(
+        seed.iter()
+            .enumerate()
+            .map(|(index, byte)| byte ^ salt[index % salt.len()])
+            .collect(),
+    ))
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let iface = "vcan0".to_string();
+    let iface = env::var("DOCAN_IFACE").unwrap_or("vcan0".to_string());
     let mut builder = DeviceBuilder::new();
     builder.add_config(iface.clone(), Default::default());
 
     let mut device = builder.build::<SocketCan>()?;
     let mut server = DoCanServer::new(device.clone(), iface.clone()).await?;
+    server.update_security_algo(security_algo).await;
 
     server.service_forever(100).await;
 

@@ -1,12 +1,8 @@
-use rand::{rng, Rng};
+use rand::{rng, RngExt};
 
 #[inline(always)]
 pub fn gen_seed(num: usize) -> Vec<u8> {
-    let mut rng = rng();
-    let mut res = Vec::new();
-    for _ in 0..num {
-        res.push(rng.random::<u8>());
-    }
-
+    let mut res = vec![0u8; num];
+    rng().fill(&mut res);
     res
 }
